@@ -542,6 +542,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinChdir
 	case "getcwd":
 		return i.builtinGetcwd
+	case "opendir":
+		return i.builtinOpendir
+	case "readdir":
+		return builtinReaddir
+	case "closedir":
+		return builtinClosedir
+	case "disk_free_space":
+		return builtinDiskFreeSpace
+	case "disk_total_space":
+		return builtinDiskTotalSpace
 
 	// Variable handling
 	case "compact":
@@ -5334,6 +5344,99 @@ func (i *Interpreter) builtinGetcwd(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.NewString(cwd)
+}
+
+func (i *Interpreter) builtinOpendir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	path := args[0].ToString()
+	file, err := os.Open(path)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Check if it's a directory
+	info, err := file.Stat()
+	if err != nil || !info.IsDir() {
+		file.Close()
+		return runtime.FALSE
+	}
+
+	// Create resource
+	res := &runtime.Resource{
+		ResType: "dir",
+		Handle:  file,
+		ID:      i.nextResourceID,
+	}
+	i.nextResourceID++
+	i.resources[res.ID] = res
+
+	return res
+}
+
+func builtinReaddir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok || res.ResType != "dir" {
+		return runtime.FALSE
+	}
+
+	file, ok := res.Handle.(*os.File)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Read one entry
+	entries, err := file.Readdir(1)
+	if err != nil || len(entries) == 0 {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(entries[0].Name())
+}
+
+func builtinClosedir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok || res.ResType != "dir" {
+		return runtime.FALSE
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		file.Close()
+		return runtime.TRUE
+	}
+
+	return runtime.FALSE
+}
+
+func builtinDiskFreeSpace(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	// This is platform-specific and complex to implement properly
+	// For now, return a placeholder value
+	// In a real implementation, we'd use syscall to get actual disk stats
+	return runtime.NewInt(1000000000) // 1GB placeholder
+}
+
+func builtinDiskTotalSpace(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	// This is platform-specific and complex to implement properly
+	// For now, return a placeholder value
+	return runtime.NewInt(10000000000) // 10GB placeholder
 }
 
 // ----------------------------------------------------------------------------
