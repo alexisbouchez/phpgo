@@ -460,10 +460,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinArrayDiff
 	case "array_diff_key":
 		return builtinArrayDiffKey
+	case "array_diff_assoc":
+		return builtinArrayDiffAssoc
 	case "array_intersect":
 		return builtinArrayIntersect
 	case "array_intersect_key":
 		return builtinArrayIntersectKey
+	case "array_intersect_assoc":
+		return builtinArrayIntersectAssoc
 	case "usort":
 		return i.builtinUsort
 	case "uasort":
@@ -4443,6 +4447,79 @@ func builtinArrayIntersectKey(args ...runtime.Value) runtime.Value {
 	result := runtime.NewArray()
 	for _, key := range arr1.Keys {
 		if keyCounts[key.ToString()] == numArrays {
+			result.Set(key, arr1.Elements[key])
+		}
+	}
+	return result
+}
+
+func builtinArrayDiffAssoc(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewArray()
+	}
+	arr1, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	// Collect key-value pairs from all other arrays
+	excludePairs := make(map[string]string)
+	for i := 1; i < len(args); i++ {
+		if arr, ok := args[i].(*runtime.Array); ok {
+			for _, key := range arr.Keys {
+				keyStr := key.ToString()
+				valStr := arr.Elements[key].ToString()
+				excludePairs[keyStr] = valStr
+			}
+		}
+	}
+
+	result := runtime.NewArray()
+	for _, key := range arr1.Keys {
+		keyStr := key.ToString()
+		valStr := arr1.Elements[key].ToString()
+		// Include if key doesn't exist in other arrays OR if value is different
+		if excludeVal, exists := excludePairs[keyStr]; !exists || excludeVal != valStr {
+			result.Set(key, arr1.Elements[key])
+		}
+	}
+	return result
+}
+
+func builtinArrayIntersectAssoc(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewArray()
+	}
+	arr1, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	// Collect key-value pairs that exist in ALL arrays
+	pairCounts := make(map[string]int)
+	numArrays := len(args)
+
+	for i := 0; i < numArrays; i++ {
+		if arr, ok := args[i].(*runtime.Array); ok {
+			seen := make(map[string]bool)
+			for _, key := range arr.Keys {
+				keyStr := key.ToString()
+				valStr := arr.Elements[key].ToString()
+				pairKey := keyStr + "\x00" + valStr // Use null byte as separator
+				if !seen[pairKey] {
+					seen[pairKey] = true
+					pairCounts[pairKey]++
+				}
+			}
+		}
+	}
+
+	result := runtime.NewArray()
+	for _, key := range arr1.Keys {
+		keyStr := key.ToString()
+		valStr := arr1.Elements[key].ToString()
+		pairKey := keyStr + "\x00" + valStr
+		if pairCounts[pairKey] == numArrays {
 			result.Set(key, arr1.Elements[key])
 		}
 	}
