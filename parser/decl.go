@@ -309,9 +309,9 @@ func (p *Parser) parseType() ast.Type {
 		return union
 	}
 
-	if p.curTokenIs(token.AMPERSAND) {
+	if p.curTokenIs(token.AMPERSAND) && p.peekIsTypeName() {
 		inter := &ast.IntersectionType{Types: []ast.Type{first}}
-		for p.curTokenIs(token.AMPERSAND) {
+		for p.curTokenIs(token.AMPERSAND) && p.peekIsTypeName() {
 			p.nextToken()
 			p.skipWhitespace()
 			inter.Types = append(inter.Types, p.parseSimpleType())
@@ -334,6 +334,16 @@ func (p *Parser) parseSimpleType() *ast.SimpleType {
 
 func (p *Parser) isTypeName() bool {
 	switch p.curToken.Type {
+	case token.T_STRING, token.T_NAME_QUALIFIED, token.T_NAME_FULLY_QUALIFIED,
+		token.T_ARRAY, token.T_CALLABLE, token.QUESTION:
+		return true
+	default:
+		return false
+	}
+}
+
+func (p *Parser) peekIsTypeName() bool {
+	switch p.peekToken.Type {
 	case token.T_STRING, token.T_NAME_QUALIFIED, token.T_NAME_FULLY_QUALIFIED,
 		token.T_ARRAY, token.T_CALLABLE, token.QUESTION:
 		return true
