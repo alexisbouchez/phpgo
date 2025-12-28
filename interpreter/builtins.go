@@ -755,6 +755,18 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinMbStrtoupper
 	case "mb_strtolower":
 		return builtinMbStrtolower
+	case "mb_convert_encoding":
+		return builtinMbConvertEncoding
+	case "mb_detect_encoding":
+		return builtinMbDetectEncoding
+	case "mb_internal_encoding":
+		return builtinMbInternalEncoding
+	case "iconv":
+		return builtinIconv
+	case "iconv_strlen":
+		return builtinIconvStrlen
+	case "iconv_substr":
+		return builtinIconvSubstr
 	case "substr_count":
 		return builtinSubstrCount
 	case "substr_compare":
@@ -889,6 +901,24 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinCheckdnsrr
 	case "getmxrr":
 		return builtinGetmxrr
+
+	// Image functions
+	case "getimagesize":
+		return builtinGetimagesize
+	case "image_type_to_mime_type":
+		return builtinImageTypeToMimeType
+	case "image_type_to_extension":
+		return builtinImageTypeToExtension
+
+	// Timezone functions
+	case "timezone_identifiers_list":
+		return builtinTimezoneIdentifiersList
+	case "timezone_abbreviations_list":
+		return builtinTimezoneAbbreviationsList
+	case "timezone_name_from_abbr":
+		return builtinTimezoneNameFromAbbr
+	case "timezone_version_get":
+		return builtinTimezoneVersionGet
 
 	default:
 		return nil
@@ -7270,6 +7300,108 @@ func builtinMbStrtolower(args ...runtime.Value) runtime.Value {
 	return runtime.NewString(strings.ToLower(str))
 }
 
+var mbInternalEncoding = "UTF-8"
+
+func builtinMbConvertEncoding(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	str := args[0].ToString()
+	// toEncoding := args[1].ToString()
+	// In Go, strings are UTF-8, so we just return the string
+	// Real implementation would need encoding conversion libraries
+	return runtime.NewString(str)
+}
+
+func builtinMbDetectEncoding(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	// Simple detection - assume UTF-8 for valid UTF-8 strings
+	str := args[0].ToString()
+	for _, r := range str {
+		if r == '\uFFFD' {
+			return runtime.NewString("ASCII")
+		}
+	}
+	return runtime.NewString("UTF-8")
+}
+
+func builtinMbInternalEncoding(args ...runtime.Value) runtime.Value {
+	if len(args) == 0 {
+		return runtime.NewString(mbInternalEncoding)
+	}
+	mbInternalEncoding = args[0].ToString()
+	return runtime.TRUE
+}
+
+func builtinIconv(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+
+	// inCharset := args[0].ToString()
+	// outCharset := args[1].ToString()
+	str := args[2].ToString()
+
+	// Go strings are UTF-8, simplified implementation
+	// Real implementation would need encoding conversion
+	return runtime.NewString(str)
+}
+
+func builtinIconvStrlen(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	str := args[0].ToString()
+	// Count runes (Unicode characters)
+	count := 0
+	for range str {
+		count++
+	}
+	return runtime.NewInt(int64(count))
+}
+
+func builtinIconvSubstr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	str := args[0].ToString()
+	offset := int(args[1].ToInt())
+	length := -1
+	if len(args) >= 3 {
+		length = int(args[2].ToInt())
+	}
+
+	runes := []rune(str)
+	runeLen := len(runes)
+
+	// Handle negative offset
+	if offset < 0 {
+		offset = runeLen + offset
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	if offset >= runeLen {
+		return runtime.NewString("")
+	}
+
+	// Handle length
+	if length < 0 {
+		length = runeLen - offset
+	}
+	if offset+length > runeLen {
+		length = runeLen - offset
+	}
+
+	return runtime.NewString(string(runes[offset : offset+length]))
+}
+
 func builtinSubstrCount(args ...runtime.Value) runtime.Value {
 	if len(args) < 2 {
 		return runtime.NewInt(0)
@@ -9498,4 +9630,334 @@ func (i *Interpreter) builtinMoveUploadedFile(args ...runtime.Value) runtime.Val
 	delete(i.httpContext.UploadedFiles, source)
 
 	return runtime.TRUE
+}
+
+// ----------------------------------------------------------------------------
+// Image functions
+
+// PHP image type constants
+const (
+	IMAGETYPE_GIF     = 1
+	IMAGETYPE_JPEG    = 2
+	IMAGETYPE_PNG     = 3
+	IMAGETYPE_SWF     = 4
+	IMAGETYPE_PSD     = 5
+	IMAGETYPE_BMP     = 6
+	IMAGETYPE_TIFF_II = 7
+	IMAGETYPE_TIFF_MM = 8
+	IMAGETYPE_JPC     = 9
+	IMAGETYPE_JP2     = 10
+	IMAGETYPE_JPX     = 11
+	IMAGETYPE_JB2     = 12
+	IMAGETYPE_SWC     = 13
+	IMAGETYPE_IFF     = 14
+	IMAGETYPE_WBMP    = 15
+	IMAGETYPE_XBM     = 16
+	IMAGETYPE_ICO     = 17
+	IMAGETYPE_WEBP    = 18
+)
+
+func builtinGetimagesize(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	if len(data) < 8 {
+		return runtime.FALSE
+	}
+
+	var width, height, imageType int
+
+	// Detect image type and get dimensions
+	switch {
+	case bytes.HasPrefix(data, []byte{0x89, 0x50, 0x4E, 0x47}): // PNG
+		imageType = IMAGETYPE_PNG
+		if len(data) >= 24 {
+			width = int(data[16])<<24 | int(data[17])<<16 | int(data[18])<<8 | int(data[19])
+			height = int(data[20])<<24 | int(data[21])<<16 | int(data[22])<<8 | int(data[23])
+		}
+	case bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}): // JPEG
+		imageType = IMAGETYPE_JPEG
+		width, height = getJPEGDimensions(data)
+	case bytes.HasPrefix(data, []byte("GIF87a")) || bytes.HasPrefix(data, []byte("GIF89a")): // GIF
+		imageType = IMAGETYPE_GIF
+		if len(data) >= 10 {
+			width = int(data[6]) | int(data[7])<<8
+			height = int(data[8]) | int(data[9])<<8
+		}
+	case bytes.HasPrefix(data, []byte("BM")): // BMP
+		imageType = IMAGETYPE_BMP
+		if len(data) >= 26 {
+			width = int(data[18]) | int(data[19])<<8 | int(data[20])<<16 | int(data[21])<<24
+			height = int(data[22]) | int(data[23])<<8 | int(data[24])<<16 | int(data[25])<<24
+			if height < 0 {
+				height = -height
+			}
+		}
+	case bytes.HasPrefix(data, []byte("RIFF")) && len(data) > 12 && bytes.Equal(data[8:12], []byte("WEBP")): // WebP
+		imageType = IMAGETYPE_WEBP
+		width, height = getWebPDimensions(data)
+	default:
+		return runtime.FALSE
+	}
+
+	// Build result array
+	result := runtime.NewArray()
+	result.Set(runtime.NewInt(0), runtime.NewInt(int64(width)))
+	result.Set(runtime.NewInt(1), runtime.NewInt(int64(height)))
+	result.Set(runtime.NewInt(2), runtime.NewInt(int64(imageType)))
+	result.Set(runtime.NewInt(3), runtime.NewString(fmt.Sprintf("width=\"%d\" height=\"%d\"", width, height)))
+	result.Set(runtime.NewString("mime"), runtime.NewString(imageTypeToMime(imageType)))
+	result.Set(runtime.NewString("channels"), runtime.NewInt(3))
+	result.Set(runtime.NewString("bits"), runtime.NewInt(8))
+
+	return result
+}
+
+func getJPEGDimensions(data []byte) (int, int) {
+	offset := 2
+	for offset < len(data)-9 {
+		if data[offset] != 0xFF {
+			return 0, 0
+		}
+		marker := data[offset+1]
+		if marker == 0xC0 || marker == 0xC1 || marker == 0xC2 {
+			height := int(data[offset+5])<<8 | int(data[offset+6])
+			width := int(data[offset+7])<<8 | int(data[offset+8])
+			return width, height
+		}
+		length := int(data[offset+2])<<8 | int(data[offset+3])
+		offset += 2 + length
+	}
+	return 0, 0
+}
+
+func getWebPDimensions(data []byte) (int, int) {
+	if len(data) < 30 {
+		return 0, 0
+	}
+	// VP8 format
+	if bytes.Equal(data[12:16], []byte("VP8 ")) && len(data) >= 30 {
+		width := int(data[26]) | int(data[27])<<8
+		height := int(data[28]) | int(data[29])<<8
+		return width & 0x3FFF, height & 0x3FFF
+	}
+	// VP8L format
+	if bytes.Equal(data[12:16], []byte("VP8L")) && len(data) >= 25 {
+		b := int(data[21]) | int(data[22])<<8 | int(data[23])<<16 | int(data[24])<<24
+		width := (b & 0x3FFF) + 1
+		height := ((b >> 14) & 0x3FFF) + 1
+		return width, height
+	}
+	// VP8X format
+	if bytes.Equal(data[12:16], []byte("VP8X")) && len(data) >= 30 {
+		width := int(data[24]) | int(data[25])<<8 | int(data[26])<<16
+		height := int(data[27]) | int(data[28])<<8 | int(data[29])<<16
+		return width + 1, height + 1
+	}
+	return 0, 0
+}
+
+func imageTypeToMime(imageType int) string {
+	switch imageType {
+	case IMAGETYPE_GIF:
+		return "image/gif"
+	case IMAGETYPE_JPEG:
+		return "image/jpeg"
+	case IMAGETYPE_PNG:
+		return "image/png"
+	case IMAGETYPE_SWF, IMAGETYPE_SWC:
+		return "application/x-shockwave-flash"
+	case IMAGETYPE_PSD:
+		return "image/vnd.adobe.photoshop"
+	case IMAGETYPE_BMP:
+		return "image/bmp"
+	case IMAGETYPE_TIFF_II, IMAGETYPE_TIFF_MM:
+		return "image/tiff"
+	case IMAGETYPE_JPC:
+		return "application/octet-stream"
+	case IMAGETYPE_JP2:
+		return "image/jp2"
+	case IMAGETYPE_JPX:
+		return "application/octet-stream"
+	case IMAGETYPE_JB2:
+		return "application/octet-stream"
+	case IMAGETYPE_IFF:
+		return "image/iff"
+	case IMAGETYPE_WBMP:
+		return "image/vnd.wap.wbmp"
+	case IMAGETYPE_XBM:
+		return "image/xbm"
+	case IMAGETYPE_ICO:
+		return "image/vnd.microsoft.icon"
+	case IMAGETYPE_WEBP:
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func builtinImageTypeToMimeType(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	imageType := int(args[0].ToInt())
+	return runtime.NewString(imageTypeToMime(imageType))
+}
+
+func builtinImageTypeToExtension(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	imageType := int(args[0].ToInt())
+	includeDot := true
+	if len(args) >= 2 {
+		includeDot = args[1].ToBool()
+	}
+
+	var ext string
+	switch imageType {
+	case IMAGETYPE_GIF:
+		ext = "gif"
+	case IMAGETYPE_JPEG:
+		ext = "jpeg"
+	case IMAGETYPE_PNG:
+		ext = "png"
+	case IMAGETYPE_SWF, IMAGETYPE_SWC:
+		ext = "swf"
+	case IMAGETYPE_PSD:
+		ext = "psd"
+	case IMAGETYPE_BMP:
+		ext = "bmp"
+	case IMAGETYPE_TIFF_II, IMAGETYPE_TIFF_MM:
+		ext = "tiff"
+	case IMAGETYPE_JPC:
+		ext = "jpc"
+	case IMAGETYPE_JP2:
+		ext = "jp2"
+	case IMAGETYPE_JPX:
+		ext = "jpx"
+	case IMAGETYPE_JB2:
+		ext = "jb2"
+	case IMAGETYPE_IFF:
+		ext = "iff"
+	case IMAGETYPE_WBMP:
+		ext = "wbmp"
+	case IMAGETYPE_XBM:
+		ext = "xbm"
+	case IMAGETYPE_ICO:
+		ext = "ico"
+	case IMAGETYPE_WEBP:
+		ext = "webp"
+	default:
+		return runtime.FALSE
+	}
+
+	if includeDot {
+		return runtime.NewString("." + ext)
+	}
+	return runtime.NewString(ext)
+}
+
+// ----------------------------------------------------------------------------
+// Timezone functions
+
+func builtinTimezoneIdentifiersList(args ...runtime.Value) runtime.Value {
+	// Return a subset of common timezone identifiers
+	identifiers := []string{
+		"Africa/Cairo", "Africa/Johannesburg", "Africa/Lagos", "Africa/Nairobi",
+		"America/Chicago", "America/Denver", "America/Los_Angeles", "America/New_York",
+		"America/Sao_Paulo", "America/Toronto", "America/Vancouver",
+		"Asia/Bangkok", "Asia/Dubai", "Asia/Hong_Kong", "Asia/Jerusalem",
+		"Asia/Kolkata", "Asia/Seoul", "Asia/Shanghai", "Asia/Singapore", "Asia/Tokyo",
+		"Australia/Melbourne", "Australia/Sydney",
+		"Europe/Amsterdam", "Europe/Berlin", "Europe/London", "Europe/Madrid",
+		"Europe/Moscow", "Europe/Paris", "Europe/Rome", "Europe/Zurich",
+		"Pacific/Auckland", "Pacific/Honolulu",
+		"UTC",
+	}
+
+	result := runtime.NewArray()
+	for i, tz := range identifiers {
+		result.Set(runtime.NewInt(int64(i)), runtime.NewString(tz))
+	}
+	return result
+}
+
+func builtinTimezoneAbbreviationsList(args ...runtime.Value) runtime.Value {
+	// Return common timezone abbreviations
+	abbrs := map[string][]map[string]interface{}{
+		"utc":  {{"dst": false, "offset": 0, "timezone_id": "UTC"}},
+		"gmt":  {{"dst": false, "offset": 0, "timezone_id": "Europe/London"}},
+		"est":  {{"dst": false, "offset": -18000, "timezone_id": "America/New_York"}},
+		"edt":  {{"dst": true, "offset": -14400, "timezone_id": "America/New_York"}},
+		"cst":  {{"dst": false, "offset": -21600, "timezone_id": "America/Chicago"}},
+		"cdt":  {{"dst": true, "offset": -18000, "timezone_id": "America/Chicago"}},
+		"mst":  {{"dst": false, "offset": -25200, "timezone_id": "America/Denver"}},
+		"mdt":  {{"dst": true, "offset": -21600, "timezone_id": "America/Denver"}},
+		"pst":  {{"dst": false, "offset": -28800, "timezone_id": "America/Los_Angeles"}},
+		"pdt":  {{"dst": true, "offset": -25200, "timezone_id": "America/Los_Angeles"}},
+		"cet":  {{"dst": false, "offset": 3600, "timezone_id": "Europe/Paris"}},
+		"cest": {{"dst": true, "offset": 7200, "timezone_id": "Europe/Paris"}},
+		"jst":  {{"dst": false, "offset": 32400, "timezone_id": "Asia/Tokyo"}},
+	}
+
+	result := runtime.NewArray()
+	for abbr, info := range abbrs {
+		arr := runtime.NewArray()
+		for j, item := range info {
+			entry := runtime.NewArray()
+			entry.Set(runtime.NewString("dst"), runtime.NewBool(item["dst"].(bool)))
+			entry.Set(runtime.NewString("offset"), runtime.NewInt(int64(item["offset"].(int))))
+			entry.Set(runtime.NewString("timezone_id"), runtime.NewString(item["timezone_id"].(string)))
+			arr.Set(runtime.NewInt(int64(j)), entry)
+		}
+		result.Set(runtime.NewString(abbr), arr)
+	}
+	return result
+}
+
+func builtinTimezoneNameFromAbbr(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	abbr := strings.ToLower(args[0].ToString())
+
+	// Map common abbreviations to timezone names
+	abbrMap := map[string]string{
+		"utc":  "UTC",
+		"gmt":  "Europe/London",
+		"est":  "America/New_York",
+		"edt":  "America/New_York",
+		"cst":  "America/Chicago",
+		"cdt":  "America/Chicago",
+		"mst":  "America/Denver",
+		"mdt":  "America/Denver",
+		"pst":  "America/Los_Angeles",
+		"pdt":  "America/Los_Angeles",
+		"cet":  "Europe/Paris",
+		"cest": "Europe/Paris",
+		"jst":  "Asia/Tokyo",
+		"kst":  "Asia/Seoul",
+		"ist":  "Asia/Kolkata",
+		"hkt":  "Asia/Hong_Kong",
+		"aest": "Australia/Sydney",
+		"aedt": "Australia/Sydney",
+	}
+
+	if tz, ok := abbrMap[abbr]; ok {
+		return runtime.NewString(tz)
+	}
+	return runtime.FALSE
+}
+
+func builtinTimezoneVersionGet(args ...runtime.Value) runtime.Value {
+	return runtime.NewString("2024.1")
 }

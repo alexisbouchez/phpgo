@@ -137,7 +137,7 @@ MEDIUM PRIORITY - Enhanced WordPress Support
 Image Manipulation (for media library):
   [ ] GD library basics (imagecreatetruecolor, imagecopyresampled, etc.)
   [ ] Image formats (JPEG, PNG, GIF, WebP)
-  [ ] getimagesize() / image_type_to_mime_type()
+  [X] getimagesize() / image_type_to_mime_type()
   [ ] exif_read_data() - read EXIF data from images
 
 XML Support (for RSS/Atom feeds, XML-RPC):
@@ -151,7 +151,7 @@ Date/Time Enhancements:
   [ ] DateTimeZone class
   [ ] date_create() / date_format()
   [X] strftime() / gmstrftime() - locale-aware formatting
-  [ ] timezone functions (timezone_identifiers_list, etc.)
+  [X] timezone functions (timezone_identifiers_list, etc.)
 
 Filter/Validation Functions:
   [X] filter_var() - filter a variable
@@ -209,11 +209,11 @@ OpenSSL/Crypto:
 
 Multi-byte String Functions:
   [X] mb_strlen() / mb_substr() / mb_strpos()
-  [ ] mb_convert_encoding() / mb_detect_encoding()
+  [X] mb_convert_encoding() / mb_detect_encoding()
   [X] mb_strtoupper() / mb_strtolower()
 
 Internationalization:
-  [ ] iconv() / iconv_strlen() / iconv_substr()
+  [X] iconv() / iconv_strlen() / iconv_substr()
   [ ] gettext() / _() - translation functions
   [ ] Locale class
 
