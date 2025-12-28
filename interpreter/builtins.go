@@ -500,6 +500,18 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "unlink":
 		return builtinUnlink
 
+	// Directory functions
+	case "mkdir":
+		return builtinMkdir
+	case "rmdir":
+		return builtinRmdir
+	case "scandir":
+		return builtinScandir
+	case "chdir":
+		return i.builtinChdir
+	case "getcwd":
+		return i.builtinGetcwd
+
 	default:
 		return nil
 	}
@@ -4692,4 +4704,95 @@ func builtinUnlink(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.TRUE
+}
+
+// ----------------------------------------------------------------------------
+// Directory functions
+
+func builtinMkdir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	pathname := args[0].ToString()
+	mode := int64(0777)
+
+	if len(args) >= 2 {
+		mode = args[1].ToInt()
+	}
+
+	recursive := false
+	if len(args) >= 3 {
+		recursive = args[2].ToBool()
+	}
+
+	var err error
+	if recursive {
+		err = os.MkdirAll(pathname, os.FileMode(mode))
+	} else {
+		err = os.Mkdir(pathname, os.FileMode(mode))
+	}
+
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.TRUE
+}
+
+func builtinRmdir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	dirname := args[0].ToString()
+	err := os.Remove(dirname)
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.TRUE
+}
+
+func builtinScandir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	dir := args[0].ToString()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	result := runtime.NewArray()
+	for _, entry := range entries {
+		result.Set(nil, runtime.NewString(entry.Name()))
+	}
+
+	return result
+}
+
+func (i *Interpreter) builtinChdir(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	dir := args[0].ToString()
+	err := os.Chdir(dir)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Update interpreter's current directory
+	newCwd, _ := os.Getwd()
+	i.currentDir = newCwd
+
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinGetcwd(args ...runtime.Value) runtime.Value {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.NewString(cwd)
 }
