@@ -15,13 +15,17 @@ import (
 
 // Interpreter executes PHP code.
 type Interpreter struct {
-	env           *runtime.Environment
-	output        strings.Builder
-	staticVars    *runtime.StaticVars
-	currentClass  string          // Current class context for self/parent/static
-	currentThis   *runtime.Object // Current object for method calls
-	includedFiles map[string]bool // Track files included with _once
-	currentDir    string          // Current directory for relative paths
+	env              *runtime.Environment
+	output           strings.Builder
+	staticVars       *runtime.StaticVars
+	currentClass     string          // Current class context for self/parent/static
+	currentThis      *runtime.Object // Current object for method calls
+	includedFiles    map[string]bool // Track files included with _once
+	currentDir       string          // Current directory for relative paths
+	currentNamespace string          // Current namespace (e.g., "App\Models")
+	useAliases       map[string]string // use aliases: alias -> fully qualified name
+	useFunctions     map[string]string // use function aliases
+	useConstants     map[string]string // use const aliases
 }
 
 // New creates a new interpreter.
@@ -34,6 +38,9 @@ func New() *Interpreter {
 		staticVars:    runtime.NewStaticVars(),
 		includedFiles: make(map[string]bool),
 		currentDir:    cwd,
+		useAliases:    make(map[string]string),
+		useFunctions:  make(map[string]string),
+		useConstants:  make(map[string]string),
 	}
 	i.registerBuiltins()
 	return i
@@ -163,14 +170,9 @@ func (i *Interpreter) evalStmt(stmt ast.Stmt) runtime.Value {
 	case *ast.EnumDecl:
 		return i.evalEnumDecl(s)
 	case *ast.NamespaceDecl:
-		// For now, just evaluate the statements
-		for _, stmt := range s.Stmts {
-			i.evalStmt(stmt)
-		}
-		return runtime.NULL
+		return i.evalNamespaceDecl(s)
 	case *ast.UseDecl:
-		// Use declarations are handled at compile time
-		return runtime.NULL
+		return i.evalUseDecl(s)
 	case *ast.ConstDecl:
 		return i.evalConstDecl(s)
 	default:
@@ -1034,7 +1036,15 @@ func (i *Interpreter) evalCall(e *ast.CallExpr) runtime.Value {
 		return builtin(args...)
 	}
 
+	// Resolve function name with namespace
+	resolvedName := i.resolveFunctionName(funcName)
+
 	// Check for user function
+	if fn, ok := i.env.GetFunction(resolvedName); ok {
+		return i.callFunction(fn, e.Args)
+	}
+
+	// Fallback to original name (for builtins called with namespace prefix)
 	if fn, ok := i.env.GetFunction(funcName); ok {
 		return i.callFunction(fn, e.Args)
 	}
@@ -1781,8 +1791,11 @@ func (i *Interpreter) evalNew(e *ast.NewExpr) runtime.Value {
 		className = i.evalExpr(c).ToString()
 	}
 
+	// Resolve class name with namespace
+	resolvedName := i.resolveClassName(className)
+
 	// Special case for Exception
-	if className == "Exception" {
+	if resolvedName == "Exception" {
 		args := i.evalArgs(e.Args)
 		msg := ""
 		if len(args) > 0 {
@@ -1791,7 +1804,11 @@ func (i *Interpreter) evalNew(e *ast.NewExpr) runtime.Value {
 		return &runtime.Exception{Message: msg}
 	}
 
-	class, ok := i.env.GetClass(className)
+	class, ok := i.env.GetClass(resolvedName)
+	if !ok {
+		// Try without namespace for built-in classes
+		class, ok = i.env.GetClass(className)
+	}
 	if !ok {
 		return runtime.NewError(fmt.Sprintf("undefined class: %s", className))
 	}
@@ -2110,6 +2127,12 @@ func (i *Interpreter) evalConstantAccess(e *ast.ClassConstFetchExpr) runtime.Val
 // Declaration evaluation
 
 func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
+	// Build fully qualified function name
+	funcName := s.Name.Name
+	if i.currentNamespace != "" {
+		funcName = i.currentNamespace + "\\" + funcName
+	}
+
 	params := make([]string, len(s.Params))
 	defaults := make([]runtime.Value, len(s.Params))
 	variadic := false
@@ -2124,7 +2147,7 @@ func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
 	}
 
 	fn := &runtime.Function{
-		Name:        s.Name.Name,
+		Name:        funcName,
 		Params:      params,
 		Defaults:    defaults,
 		Variadic:    variadic,
@@ -2133,7 +2156,7 @@ func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
 		Env:         i.env,
 	}
 
-	i.env.DefineFunction(s.Name.Name, fn)
+	i.env.DefineFunction(funcName, fn)
 	return runtime.NULL
 }
 
@@ -2198,8 +2221,14 @@ func containsYield(node interface{}) bool {
 }
 
 func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
+	// Build fully qualified class name
+	className := s.Name.Name
+	if i.currentNamespace != "" {
+		className = i.currentNamespace + "\\" + className
+	}
+
 	class := &runtime.Class{
-		Name:        s.Name.Name,
+		Name:        className,
 		Properties:  make(map[string]*runtime.PropertyDef),
 		StaticProps: make(map[string]runtime.Value),
 		Methods:     make(map[string]*runtime.Method),
@@ -2210,7 +2239,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 
 	// Handle extends
 	if s.Extends != nil {
-		parentName := s.Extends.(*ast.Ident).Name
+		parentName := i.resolveClassName(i.exprToNamespaceName(s.Extends))
 		if parent, ok := i.env.GetClass(parentName); ok {
 			// Cannot extend final class
 			if parent.IsFinal {
@@ -2230,13 +2259,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 
 	// Handle implements
 	for _, impl := range s.Implements {
-		var ifaceName string
-		switch iface := impl.(type) {
-		case *ast.Ident:
-			ifaceName = iface.Name
-		default:
-			ifaceName = i.evalExpr(iface).ToString()
-		}
+		ifaceName := i.resolveClassName(i.exprToNamespaceName(impl))
 		if iface, ok := i.env.GetInterface(ifaceName); ok {
 			class.Interfaces = append(class.Interfaces, iface)
 		}
@@ -2393,7 +2416,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 		}
 	}
 
-	i.env.DefineClass(s.Name.Name, class)
+	i.env.DefineClass(className, class)
 	return runtime.NULL
 }
 
@@ -2581,4 +2604,135 @@ func (i *Interpreter) evalInclude(e *ast.IncludeExpr) runtime.Value {
 	i.currentDir = oldDir
 
 	return result
+}
+
+// evalNamespaceDecl handles namespace declarations
+func (i *Interpreter) evalNamespaceDecl(s *ast.NamespaceDecl) runtime.Value {
+	// Save previous namespace
+	oldNamespace := i.currentNamespace
+	oldAliases := i.useAliases
+	oldFunctions := i.useFunctions
+	oldConstants := i.useConstants
+
+	// Set new namespace
+	if s.Name != nil {
+		i.currentNamespace = i.exprToNamespaceName(s.Name)
+	} else {
+		i.currentNamespace = ""
+	}
+
+	// Reset use aliases for this namespace
+	i.useAliases = make(map[string]string)
+	i.useFunctions = make(map[string]string)
+	i.useConstants = make(map[string]string)
+
+	// Execute statements in namespace
+	for _, stmt := range s.Stmts {
+		i.evalStmt(stmt)
+	}
+
+	// Restore previous namespace (for bracketed namespaces)
+	if s.Bracketed {
+		i.currentNamespace = oldNamespace
+		i.useAliases = oldAliases
+		i.useFunctions = oldFunctions
+		i.useConstants = oldConstants
+	}
+
+	return runtime.NULL
+}
+
+// evalUseDecl handles use declarations
+func (i *Interpreter) evalUseDecl(s *ast.UseDecl) runtime.Value {
+	for _, use := range s.Uses {
+		fqn := i.exprToNamespaceName(use.Name)
+
+		// Determine alias (last part of name or explicit alias)
+		var alias string
+		if use.Alias != nil {
+			alias = use.Alias.Name
+		} else {
+			parts := strings.Split(fqn, "\\")
+			alias = parts[len(parts)-1]
+		}
+
+		// Determine type of use
+		useType := s.Type
+		if use.Type != 0 {
+			useType = use.Type
+		}
+
+		switch useType {
+		case token.T_FUNCTION:
+			i.useFunctions[alias] = fqn
+		case token.T_CONST:
+			i.useConstants[alias] = fqn
+		default:
+			// Class/interface/trait
+			i.useAliases[alias] = fqn
+		}
+	}
+	return runtime.NULL
+}
+
+// exprToNamespaceName converts an expression to a namespace name string
+func (i *Interpreter) exprToNamespaceName(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	default:
+		return i.evalExpr(expr).ToString()
+	}
+}
+
+// resolveClassName resolves a class name based on current namespace and use aliases
+func (i *Interpreter) resolveClassName(name string) string {
+	// Fully qualified name (starts with \)
+	if strings.HasPrefix(name, "\\") {
+		return strings.TrimPrefix(name, "\\")
+	}
+
+	// Check use aliases first
+	parts := strings.SplitN(name, "\\", 2)
+	if fqn, ok := i.useAliases[parts[0]]; ok {
+		if len(parts) > 1 {
+			return fqn + "\\" + parts[1]
+		}
+		return fqn
+	}
+
+	// Unqualified name in current namespace
+	if i.currentNamespace != "" && !strings.Contains(name, "\\") {
+		return i.currentNamespace + "\\" + name
+	}
+
+	// Qualified name relative to current namespace
+	if i.currentNamespace != "" {
+		return i.currentNamespace + "\\" + name
+	}
+
+	return name
+}
+
+// resolveFunctionName resolves a function name based on current namespace and use aliases
+func (i *Interpreter) resolveFunctionName(name string) string {
+	// Fully qualified name (starts with \)
+	if strings.HasPrefix(name, "\\") {
+		return strings.TrimPrefix(name, "\\")
+	}
+
+	// Check use function aliases
+	if fqn, ok := i.useFunctions[name]; ok {
+		return fqn
+	}
+
+	// For unqualified names, try namespaced first, then global
+	if i.currentNamespace != "" && !strings.Contains(name, "\\") {
+		namespacedName := i.currentNamespace + "\\" + name
+		if _, ok := i.env.GetFunction(namespacedName); ok {
+			return namespacedName
+		}
+	}
+
+	return name
 }

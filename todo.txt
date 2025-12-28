@@ -1,5 +1,4 @@
 HIGH PRIORITY
-- Proper namespace resolution
 
 MEDIUM PRIORITY
 - call_user_func / call_user_func_array

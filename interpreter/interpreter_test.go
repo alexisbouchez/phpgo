@@ -1948,3 +1948,107 @@ func TestEvalConstructorPropertyPromotionDefaults(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Namespace Resolution
+
+func TestEvalNamespaceBasic(t *testing.T) {
+	input := `<?php
+	namespace App\Models;
+
+	class User {
+		public function getName() {
+			return "John";
+		}
+	}
+
+	$u = new User();
+	echo $u->getName();
+	`
+	expected := "John"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamespaceUseClass(t *testing.T) {
+	input := `<?php
+	namespace App\Models;
+
+	class User {
+		public string $name = "Alice";
+	}
+
+	namespace App\Controllers;
+
+	use App\Models\User;
+
+	$u = new User();
+	echo $u->name;
+	`
+	expected := "Alice"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamespaceUseAlias(t *testing.T) {
+	input := `<?php
+	namespace App\Models;
+
+	class User {
+		public string $name = "Bob";
+	}
+
+	namespace App\Controllers;
+
+	use App\Models\User as U;
+
+	$u = new U();
+	echo $u->name;
+	`
+	expected := "Bob"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamespaceFunction(t *testing.T) {
+	input := `<?php
+	namespace App\Helpers;
+
+	function greet($name) {
+		return "Hello, " . $name;
+	}
+
+	echo greet("World");
+	`
+	expected := "Hello, World"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamespaceFQN(t *testing.T) {
+	input := `<?php
+	namespace App\Models;
+
+	class User {
+		public string $name = "Charlie";
+	}
+
+	namespace App\Controllers;
+
+	$u = new \App\Models\User();
+	echo $u->name;
+	`
+	expected := "Charlie"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
