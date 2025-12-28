@@ -401,6 +401,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinArrayIntersect
 	case "usort":
 		return i.builtinUsort
+	case "uasort":
+		return i.builtinUasort
+	case "uksort":
+		return i.builtinUksort
 	case "array_walk":
 		return i.builtinArrayWalk
 	case "array_rand":
@@ -3452,6 +3456,66 @@ func (i *Interpreter) builtinUsort(args ...runtime.Value) runtime.Value {
 		arr.Elements[key] = v
 		arr.NextIndex = int64(idx + 1)
 	}
+
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinUasort(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	callback, ok := args[1].(*runtime.Function)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Create slice of key-value pairs
+	type kvPair struct {
+		key runtime.Value
+		val runtime.Value
+	}
+	pairs := make([]kvPair, 0, len(arr.Keys))
+	for _, key := range arr.Keys {
+		pairs = append(pairs, kvPair{key, arr.Elements[key]})
+	}
+
+	// Sort by value using callback
+	sort.Slice(pairs, func(x, y int) bool {
+		result := i.callFunctionWithArgs(callback, []runtime.Value{pairs[x].val, pairs[y].val})
+		return result.ToInt() < 0
+	})
+
+	// Rebuild array with original keys
+	arr.Keys = make([]runtime.Value, len(pairs))
+	for idx, p := range pairs {
+		arr.Keys[idx] = p.key
+	}
+
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinUksort(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	callback, ok := args[1].(*runtime.Function)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Sort keys using callback
+	sort.Slice(arr.Keys, func(x, y int) bool {
+		result := i.callFunctionWithArgs(callback, []runtime.Value{arr.Keys[x], arr.Keys[y]})
+		return result.ToInt() < 0
+	})
 
 	return runtime.TRUE
 }
