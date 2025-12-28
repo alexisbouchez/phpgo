@@ -1063,6 +1063,50 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "gzinflate":
 		return builtinGzinflate
 
+	// Ctype functions
+	case "ctype_alnum":
+		return builtinCtypeAlnum
+	case "ctype_alpha":
+		return builtinCtypeAlpha
+	case "ctype_digit":
+		return builtinCtypeDigit
+	case "ctype_lower":
+		return builtinCtypeLower
+	case "ctype_upper":
+		return builtinCtypeUpper
+	case "ctype_space":
+		return builtinCtypeSpace
+	case "ctype_xdigit":
+		return builtinCtypeXdigit
+	case "ctype_cntrl":
+		return builtinCtypeCntrl
+	case "ctype_graph":
+		return builtinCtypeGraph
+	case "ctype_print":
+		return builtinCtypePrint
+	case "ctype_punct":
+		return builtinCtypePunct
+
+	// BCMath functions
+	case "bcadd":
+		return builtinBcadd
+	case "bcsub":
+		return builtinBcsub
+	case "bcmul":
+		return builtinBcmul
+	case "bcdiv":
+		return builtinBcdiv
+	case "bcmod":
+		return builtinBcmod
+	case "bcpow":
+		return builtinBcpow
+	case "bcsqrt":
+		return builtinBcsqrt
+	case "bccomp":
+		return builtinBccomp
+	case "bcscale":
+		return builtinBcscale
+
 	// Additional string functions
 	case "str_contains":
 		return builtinStrContains
@@ -11494,4 +11538,337 @@ func builtinBindtextdomain(args ...runtime.Value) runtime.Value {
 	path := args[1].ToString()
 	gettextDomainPaths[domain] = path
 	return runtime.NewString(path)
+}
+
+// ----------------------------------------------------------------------------
+// Ctype functions
+
+func builtinCtypeAlnum(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeAlpha(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')) {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeDigit(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeLower(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c < 'a' || c > 'z' {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeUpper(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c < 'A' || c > 'Z' {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeSpace(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\v' && c != '\f' {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeXdigit(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeCntrl(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c >= 32 && c != 127 {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypeGraph(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c <= 32 || c == 127 {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypePrint(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		if c < 32 || c == 127 {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+func builtinCtypePunct(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	s := args[0].ToString()
+	if len(s) == 0 {
+		return runtime.FALSE
+	}
+	for _, c := range s {
+		isPunct := (c >= 33 && c <= 47) || (c >= 58 && c <= 64) ||
+			(c >= 91 && c <= 96) || (c >= 123 && c <= 126)
+		if !isPunct {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
+// ----------------------------------------------------------------------------
+// BCMath functions
+
+var bcmathScale = 0
+
+func builtinBcadd(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("0")
+	}
+	left := args[0].ToFloat()
+	right := args[1].ToFloat()
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+	result := left + right
+	return runtime.NewString(formatBcResult(result, scale))
+}
+
+func builtinBcsub(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("0")
+	}
+	left := args[0].ToFloat()
+	right := args[1].ToFloat()
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+	result := left - right
+	return runtime.NewString(formatBcResult(result, scale))
+}
+
+func builtinBcmul(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("0")
+	}
+	left := args[0].ToFloat()
+	right := args[1].ToFloat()
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+	result := left * right
+	return runtime.NewString(formatBcResult(result, scale))
+}
+
+func builtinBcdiv(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("0")
+	}
+	left := args[0].ToFloat()
+	right := args[1].ToFloat()
+	if right == 0 {
+		return runtime.NULL
+	}
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+	result := left / right
+	return runtime.NewString(formatBcResult(result, scale))
+}
+
+func builtinBcmod(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("0")
+	}
+	left := args[0].ToInt()
+	right := args[1].ToInt()
+	if right == 0 {
+		return runtime.NULL
+	}
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+	result := left % right
+	return runtime.NewString(formatBcResult(float64(result), scale))
+}
+
+func builtinBcpow(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("0")
+	}
+	base := args[0].ToFloat()
+	exp := args[1].ToInt()
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+	result := math.Pow(base, float64(exp))
+	return runtime.NewString(formatBcResult(result, scale))
+}
+
+func builtinBcsqrt(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("0")
+	}
+	operand := args[0].ToFloat()
+	if operand < 0 {
+		return runtime.NULL
+	}
+	scale := bcmathScale
+	if len(args) >= 2 {
+		scale = int(args[1].ToInt())
+	}
+	result := math.Sqrt(operand)
+	return runtime.NewString(formatBcResult(result, scale))
+}
+
+func builtinBccomp(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+	left := args[0].ToFloat()
+	right := args[1].ToFloat()
+	scale := bcmathScale
+	if len(args) >= 3 {
+		scale = int(args[2].ToInt())
+	}
+
+	// Round to scale for comparison
+	multiplier := math.Pow(10, float64(scale))
+	left = math.Round(left*multiplier) / multiplier
+	right = math.Round(right*multiplier) / multiplier
+
+	if left < right {
+		return runtime.NewInt(-1)
+	}
+	if left > right {
+		return runtime.NewInt(1)
+	}
+	return runtime.NewInt(0)
+}
+
+func builtinBcscale(args ...runtime.Value) runtime.Value {
+	oldScale := bcmathScale
+	if len(args) >= 1 {
+		bcmathScale = int(args[0].ToInt())
+	}
+	return runtime.NewInt(int64(oldScale))
+}
+
+func formatBcResult(value float64, scale int) string {
+	if scale <= 0 {
+		return strconv.FormatInt(int64(value), 10)
+	}
+	format := fmt.Sprintf("%%.%df", scale)
+	return fmt.Sprintf(format, value)
 }
