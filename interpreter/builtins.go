@@ -607,6 +607,20 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinLog1p
 	case "expm1":
 		return builtinExpm1
+	case "atan":
+		return builtinAtan
+	case "atan2":
+		return builtinAtan2
+	case "asin":
+		return builtinAsin
+	case "acos":
+		return builtinAcos
+	case "sinh":
+		return builtinSinh
+	case "cosh":
+		return builtinCosh
+	case "tanh":
+		return builtinTanh
 
 	// URL functions
 	case "parse_url":
@@ -6154,6 +6168,57 @@ func builtinExpm1(args ...runtime.Value) runtime.Value {
 		return runtime.NewFloat(0)
 	}
 	return runtime.NewFloat(math.Expm1(args[0].ToFloat()))
+}
+
+func builtinAtan(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Atan(args[0].ToFloat()))
+}
+
+func builtinAtan2(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewFloat(0)
+	}
+	y := args[0].ToFloat()
+	x := args[1].ToFloat()
+	return runtime.NewFloat(math.Atan2(y, x))
+}
+
+func builtinAsin(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Asin(args[0].ToFloat()))
+}
+
+func builtinAcos(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Acos(args[0].ToFloat()))
+}
+
+func builtinSinh(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Sinh(args[0].ToFloat()))
+}
+
+func builtinCosh(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Cosh(args[0].ToFloat()))
+}
+
+func builtinTanh(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Tanh(args[0].ToFloat()))
 }
 
 // ----------------------------------------------------------------------------
