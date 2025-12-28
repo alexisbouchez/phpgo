@@ -512,6 +512,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "getcwd":
 		return i.builtinGetcwd
 
+	// Variable handling
+	case "compact":
+		return i.builtinCompact
+	case "extract":
+		return i.builtinExtract
+	case "array_pad":
+		return builtinArrayPad
+
 	default:
 		return nil
 	}
@@ -4795,4 +4803,129 @@ func (i *Interpreter) builtinGetcwd(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.NewString(cwd)
+}
+
+// ----------------------------------------------------------------------------
+// Variable handling functions
+
+func (i *Interpreter) builtinCompact(args ...runtime.Value) runtime.Value {
+	result := runtime.NewArray()
+
+	for _, arg := range args {
+		varName := arg.ToString()
+		// Try to get variable from environment
+		if val, ok := i.env.Get(varName); ok {
+			result.Set(runtime.NewString(varName), val)
+		}
+	}
+
+	return result
+}
+
+func (i *Interpreter) builtinExtract(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewInt(0)
+	}
+
+	extractType := int64(0) // EXTR_OVERWRITE by default
+	if len(args) >= 2 {
+		extractType = args[1].ToInt()
+	}
+
+	count := int64(0)
+	for _, key := range arr.Keys {
+		varName := key.ToString()
+		value := arr.Elements[key]
+
+		// Check if variable exists
+		_, exists := i.env.Get(varName)
+
+		switch extractType {
+		case 0: // EXTR_OVERWRITE - overwrite existing variables (default)
+			i.env.Set(varName, value)
+			count++
+		case 1: // EXTR_SKIP - skip existing variables
+			if !exists {
+				i.env.Set(varName, value)
+				count++
+			}
+		default:
+			i.env.Set(varName, value)
+			count++
+		}
+	}
+
+	return runtime.NewInt(count)
+}
+
+func builtinArrayPad(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.NewArray()
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	size := int(args[1].ToInt())
+	value := args[2]
+
+	result := runtime.NewArray()
+
+	// Copy existing elements
+	for _, key := range arr.Keys {
+		result.Set(key, arr.Elements[key])
+	}
+
+	currentLen := len(arr.Keys)
+	absSize := size
+	if absSize < 0 {
+		absSize = -absSize
+	}
+
+	if currentLen >= absSize {
+		return result
+	}
+
+	// Pad at the end (positive size) or beginning (negative size)
+	padCount := absSize - currentLen
+
+	if size > 0 {
+		// Pad at the end
+		for i := 0; i < padCount; i++ {
+			result.Set(nil, value)
+		}
+	} else {
+		// Pad at the beginning
+		newKeys := make([]runtime.Value, 0, absSize)
+		newElements := make(map[runtime.Value]runtime.Value)
+
+		// Add padding values first
+		for i := 0; i < padCount; i++ {
+			key := runtime.NewInt(int64(i))
+			newKeys = append(newKeys, key)
+			newElements[key] = value
+		}
+
+		// Add original elements
+		idx := int64(padCount)
+		for _, k := range result.Keys {
+			newKey := runtime.NewInt(idx)
+			newKeys = append(newKeys, newKey)
+			newElements[newKey] = result.Elements[k]
+			idx++
+		}
+
+		result.Keys = newKeys
+		result.Elements = newElements
+		result.NextIndex = idx
+	}
+
+	return result
 }
