@@ -54,11 +54,13 @@ func (i *Interpreter) evalFile(file *ast.File) runtime.Value {
 	var result runtime.Value = runtime.NULL
 	for _, stmt := range file.Stmts {
 		result = i.evalStmt(stmt)
-		// Check for return/break/continue
+		// Check for return/break/continue/exit
 		switch result.(type) {
 		case *runtime.ReturnValue:
 			return result.(*runtime.ReturnValue).Value
 		case *runtime.Error:
+			return result
+		case *runtime.Exit:
 			return result
 		}
 	}
@@ -181,7 +183,7 @@ func (i *Interpreter) evalBlock(block *ast.BlockStmt) runtime.Value {
 	for _, stmt := range block.Stmts {
 		result = i.evalStmt(stmt)
 		switch result.(type) {
-		case *runtime.ReturnValue, *runtime.Break, *runtime.Continue, *runtime.Exception:
+		case *runtime.ReturnValue, *runtime.Break, *runtime.Continue, *runtime.Exception, *runtime.Exit:
 			return result
 		}
 	}
@@ -509,6 +511,8 @@ func (i *Interpreter) evalExpr(expr ast.Expr) runtime.Value {
 	case *ast.ListExpr:
 		// list() on its own doesn't make sense, it's used in assignment
 		return runtime.NULL
+	case *ast.ExitExpr:
+		return i.evalExit(e)
 	default:
 		return runtime.NewError(fmt.Sprintf("unknown expression type: %T", expr))
 	}
@@ -1816,6 +1820,23 @@ func (i *Interpreter) evalCast(e *ast.CastExpr) runtime.Value {
 	}
 
 	return val
+}
+
+func (i *Interpreter) evalExit(e *ast.ExitExpr) runtime.Value {
+	exit := &runtime.Exit{Status: 0}
+	if e.Expr != nil {
+		val := i.evalExpr(e.Expr)
+		switch v := val.(type) {
+		case *runtime.Int:
+			exit.Status = int(v.Value)
+		case *runtime.String:
+			i.output.WriteString(v.Value)
+			exit.Message = v.Value
+		default:
+			exit.Status = int(val.ToInt())
+		}
+	}
+	return exit
 }
 
 func (i *Interpreter) evalIsset(e *ast.IssetExpr) runtime.Value {

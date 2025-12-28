@@ -489,6 +489,21 @@ func (c *Continue) ToString() string { return "" }
 func (c *Continue) Inspect() string  { return fmt.Sprintf("continue(%d)", c.Levels) }
 
 // ----------------------------------------------------------------------------
+// Exit (for exit/die)
+
+type Exit struct {
+	Status int
+	Message string
+}
+
+func (e *Exit) Type() string     { return "exit" }
+func (e *Exit) ToBool() bool     { return false }
+func (e *Exit) ToInt() int64     { return int64(e.Status) }
+func (e *Exit) ToFloat() float64 { return float64(e.Status) }
+func (e *Exit) ToString() string { return e.Message }
+func (e *Exit) Inspect() string  { return fmt.Sprintf("exit(%d)", e.Status) }
+
+// ----------------------------------------------------------------------------
 // Error
 
 type Error struct {

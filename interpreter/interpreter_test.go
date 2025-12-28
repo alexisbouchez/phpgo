@@ -1709,3 +1709,45 @@ func TestEvalNullSafeChained(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+func TestEvalExit(t *testing.T) {
+	input := `<?php
+	echo "before";
+	exit;
+	echo "after";
+	`
+	expected := "before"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalExitWithCode(t *testing.T) {
+	input := `<?php
+	echo "start";
+	exit(1);
+	echo "end";
+	`
+	interp := New()
+	result := interp.Eval(input)
+	if exitVal, ok := result.(*runtime.Exit); !ok || exitVal.Status != 1 {
+		t.Errorf("expected exit with status 1, got %v", result)
+	}
+	if interp.Output() != "start" {
+		t.Errorf("expected output 'start', got %q", interp.Output())
+	}
+}
+
+func TestEvalDieWithMessage(t *testing.T) {
+	input := `<?php
+	echo "hello ";
+	die("goodbye");
+	echo "world";
+	`
+	expected := "hello goodbye"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
