@@ -1,6 +1,7 @@
 package interpreter
 
 import (
+	"bytes"
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/base64"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"mime/quotedprintable"
 	"net"
 	"net/url"
 	"os"
@@ -400,6 +402,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinBin2hex
 	case "hex2bin":
 		return builtinHex2bin
+	case "quoted_printable_encode":
+		return builtinQuotedPrintableEncode
+	case "quoted_printable_decode":
+		return builtinQuotedPrintableDecode
 
 	// Additional string functions
 	case "str_contains":
@@ -3700,6 +3706,34 @@ func builtinHex2bin(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.NewString(string(data))
+}
+
+func builtinQuotedPrintableEncode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	var buf bytes.Buffer
+	writer := quotedprintable.NewWriter(&buf)
+	_, err := writer.Write([]byte(str))
+	if err != nil {
+		return runtime.FALSE
+	}
+	writer.Close()
+	return runtime.NewString(buf.String())
+}
+
+func builtinQuotedPrintableDecode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	reader := quotedprintable.NewReader(strings.NewReader(str))
+	decoded, err := io.ReadAll(reader)
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.NewString(string(decoded))
 }
 
 // ----------------------------------------------------------------------------
