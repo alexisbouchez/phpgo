@@ -225,6 +225,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	// Type functions
 	case "gettype":
 		return builtinGettype
+	case "settype":
+		return builtinSettype
 	case "is_null":
 		return builtinIsNull
 	case "is_bool":
@@ -241,6 +243,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinIsObject
 	case "is_numeric":
 		return builtinIsNumeric
+	case "is_callable":
+		return i.builtinIsCallable
 	case "intval":
 		return builtinIntval
 	case "floatval", "doubleval":
@@ -1722,6 +1726,38 @@ func builtinGettype(args ...runtime.Value) runtime.Value {
 	return runtime.NewString(args[0].Type())
 }
 
+func builtinSettype(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	// Note: In PHP, settype modifies the variable by reference
+	// This implementation returns the converted value
+	// For proper reference support, this would need deeper integration
+
+	targetType := args[1].ToString()
+	value := args[0]
+
+	switch targetType {
+	case "boolean", "bool":
+		return runtime.NewBool(value.ToBool())
+	case "integer", "int":
+		return runtime.NewInt(value.ToInt())
+	case "float", "double":
+		return runtime.NewFloat(value.ToFloat())
+	case "string":
+		return runtime.NewString(value.ToString())
+	case "array":
+		arr := runtime.NewArray()
+		arr.Set(nil, value)
+		return arr
+	case "null":
+		return runtime.NULL
+	default:
+		return runtime.FALSE
+	}
+}
+
 func builtinIsNull(args ...runtime.Value) runtime.Value {
 	if len(args) < 1 {
 		return runtime.TRUE
@@ -1791,6 +1827,31 @@ func builtinIsNumeric(args ...runtime.Value) runtime.Value {
 		_, err2 := fmt.Sscanf(s, "%f", new(float64))
 		return runtime.NewBool(err1 == nil || err2 == nil)
 	}
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinIsCallable(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	value := args[0]
+
+	// Check if it's a function
+	if _, ok := value.(*runtime.Function); ok {
+		return runtime.TRUE
+	}
+
+	// Check if it's a string referring to a function name
+	if str, ok := value.(*runtime.String); ok {
+		if _, exists := i.env.GetFunction(str.Value); exists {
+			return runtime.TRUE
+		}
+	}
+
+	// Could also check for callable arrays [object, method] or [class, method]
+	// For now, keep it simple
+
 	return runtime.FALSE
 }
 
