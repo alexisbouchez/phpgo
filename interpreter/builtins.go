@@ -254,6 +254,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinVarDump
 	case "print_r":
 		return i.builtinPrintR
+	case "var_export":
+		return i.builtinVarExport
 
 	// Output buffering functions
 	case "ob_start":
@@ -282,6 +284,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinFunctionExists
 	case "class_exists":
 		return i.builtinClassExists
+	case "class_alias":
+		return i.builtinClassAlias
 	case "call_user_func":
 		return i.builtinCallUserFunc
 	case "call_user_func_array":
@@ -1801,6 +1805,61 @@ func (i *Interpreter) builtinPrintR(args ...runtime.Value) runtime.Value {
 	return runtime.TRUE
 }
 
+func (i *Interpreter) builtinVarExport(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	returnOutput := false
+	if len(args) >= 2 {
+		returnOutput = args[1].ToBool()
+	}
+
+	output := i.exportValue(args[0], 0)
+	if returnOutput {
+		return runtime.NewString(output)
+	}
+	i.writeOutput(output)
+	return runtime.NULL
+}
+
+func (i *Interpreter) exportValue(v runtime.Value, indent int) string {
+	switch val := v.(type) {
+	case *runtime.String:
+		return fmt.Sprintf("'%s'", strings.ReplaceAll(strings.ReplaceAll(val.Value, "\\", "\\\\"), "'", "\\'"))
+	case *runtime.Int:
+		return fmt.Sprintf("%d", val.Value)
+	case *runtime.Float:
+		return fmt.Sprintf("%g", val.Value)
+	case *runtime.Bool:
+		if val.Value {
+			return "true"
+		}
+		return "false"
+	case *runtime.Null:
+		return "NULL"
+	case *runtime.Array:
+		if len(val.Keys) == 0 {
+			return "array ()"
+		}
+		var sb strings.Builder
+		sb.WriteString("array (\n")
+		indentStr := strings.Repeat("  ", indent+1)
+		for _, key := range val.Keys {
+			sb.WriteString(indentStr)
+			sb.WriteString(i.exportValue(key, indent+1))
+			sb.WriteString(" => ")
+			sb.WriteString(i.exportValue(val.Elements[key], indent+1))
+			sb.WriteString(",\n")
+		}
+		sb.WriteString(strings.Repeat("  ", indent))
+		sb.WriteString(")")
+		return sb.String()
+	default:
+		return "NULL"
+	}
+}
+
 // inspectValue returns a string representation, using __debugInfo for objects if available
 func (i *Interpreter) inspectValue(v runtime.Value) string {
 	if obj, ok := v.(*runtime.Object); ok {
@@ -1938,6 +1997,25 @@ func (i *Interpreter) builtinClassExists(args ...runtime.Value) runtime.Value {
 	name := args[0].ToString()
 	_, ok := i.env.GetClass(name)
 	return runtime.NewBool(ok)
+}
+
+func (i *Interpreter) builtinClassAlias(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	originalName := args[0].ToString()
+	aliasName := args[1].ToString()
+
+	// Get the original class
+	class, ok := i.env.GetClass(originalName)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Create the alias by defining the same class with the new name
+	i.env.DefineClass(aliasName, class)
+	return runtime.TRUE
 }
 
 func (i *Interpreter) builtinCallUserFunc(args ...runtime.Value) runtime.Value {
