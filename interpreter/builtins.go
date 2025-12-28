@@ -2,13 +2,16 @@ package interpreter
 
 import (
 	"bytes"
+	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"math"
 	"mime/quotedprintable"
@@ -424,6 +427,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinSha1
 	case "hash":
 		return builtinHash
+	case "crc32":
+		return builtinCrc32
+	case "hash_hmac":
+		return builtinHashHmac
+	case "hash_equals":
+		return builtinHashEquals
+	case "password_hash":
+		return builtinPasswordHash
+	case "password_verify":
+		return builtinPasswordVerify
 	case "base64_encode":
 		return builtinBase64Encode
 	case "base64_decode":
@@ -4298,6 +4311,93 @@ func builtinHash(args ...runtime.Value) runtime.Value {
 	default:
 		return runtime.FALSE
 	}
+}
+
+func builtinCrc32(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+	data := []byte(args[0].ToString())
+	checksum := crc32.ChecksumIEEE(data)
+	return runtime.NewInt(int64(checksum))
+}
+
+func builtinHashHmac(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+	algo := strings.ToLower(args[0].ToString())
+	data := []byte(args[1].ToString())
+	key := []byte(args[2].ToString())
+
+	var h []byte
+	switch algo {
+	case "md5":
+		mac := hmac.New(md5.New, key)
+		mac.Write(data)
+		h = mac.Sum(nil)
+	case "sha1":
+		mac := hmac.New(sha1.New, key)
+		mac.Write(data)
+		h = mac.Sum(nil)
+	case "sha256":
+		mac := hmac.New(sha256.New, key)
+		mac.Write(data)
+		h = mac.Sum(nil)
+	default:
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(hex.EncodeToString(h))
+}
+
+func builtinHashEquals(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	known := args[0].ToString()
+	user := args[1].ToString()
+
+	// Timing-safe comparison
+	if len(known) != len(user) {
+		return runtime.FALSE
+	}
+
+	result := 0
+	for i := 0; i < len(known); i++ {
+		result |= int(known[i]) ^ int(user[i])
+	}
+
+	return runtime.NewBool(result == 0)
+}
+
+func builtinPasswordHash(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	password := args[0].ToString()
+
+	// Simple bcrypt-like hash using SHA-256 (not actual bcrypt for simplicity)
+	// In production, use golang.org/x/crypto/bcrypt
+	hash := sha256.Sum256([]byte(password))
+	// Add a simple salt prefix (this is NOT secure, just for demo)
+	result := "$2y$10$" + hex.EncodeToString(hash[:])
+
+	return runtime.NewString(result)
+}
+
+func builtinPasswordVerify(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	password := args[0].ToString()
+	hash := args[1].ToString()
+
+	// Simple verification - hash the password and compare
+	computed := sha256.Sum256([]byte(password))
+	expected := "$2y$10$" + hex.EncodeToString(computed[:])
+
+	return runtime.NewBool(expected == hash)
 }
 
 func builtinBase64Encode(args ...runtime.Value) runtime.Value {
