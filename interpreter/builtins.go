@@ -40,6 +40,236 @@ func (i *Interpreter) registerBuiltins() {
 	i.registerIteratorInterfaces()
 	// Register SPL exception classes
 	i.registerSPLExceptions()
+	// Register predefined constants
+	i.registerPredefinedConstants()
+}
+
+func (i *Interpreter) registerPredefinedConstants() {
+	// Error level constants
+	i.env.DefineConstant("E_ERROR", runtime.NewInt(1))
+	i.env.DefineConstant("E_WARNING", runtime.NewInt(2))
+	i.env.DefineConstant("E_PARSE", runtime.NewInt(4))
+	i.env.DefineConstant("E_NOTICE", runtime.NewInt(8))
+	i.env.DefineConstant("E_CORE_ERROR", runtime.NewInt(16))
+	i.env.DefineConstant("E_CORE_WARNING", runtime.NewInt(32))
+	i.env.DefineConstant("E_COMPILE_ERROR", runtime.NewInt(64))
+	i.env.DefineConstant("E_COMPILE_WARNING", runtime.NewInt(128))
+	i.env.DefineConstant("E_USER_ERROR", runtime.NewInt(256))
+	i.env.DefineConstant("E_USER_WARNING", runtime.NewInt(512))
+	i.env.DefineConstant("E_USER_NOTICE", runtime.NewInt(1024))
+	i.env.DefineConstant("E_STRICT", runtime.NewInt(2048))
+	i.env.DefineConstant("E_RECOVERABLE_ERROR", runtime.NewInt(4096))
+	i.env.DefineConstant("E_DEPRECATED", runtime.NewInt(8192))
+	i.env.DefineConstant("E_USER_DEPRECATED", runtime.NewInt(16384))
+	i.env.DefineConstant("E_ALL", runtime.NewInt(32767))
+
+	// Filter constants - Validation
+	i.env.DefineConstant("FILTER_VALIDATE_INT", runtime.NewInt(257))
+	i.env.DefineConstant("FILTER_VALIDATE_BOOLEAN", runtime.NewInt(258))
+	i.env.DefineConstant("FILTER_VALIDATE_FLOAT", runtime.NewInt(259))
+	i.env.DefineConstant("FILTER_VALIDATE_REGEXP", runtime.NewInt(272))
+	i.env.DefineConstant("FILTER_VALIDATE_URL", runtime.NewInt(273))
+	i.env.DefineConstant("FILTER_VALIDATE_EMAIL", runtime.NewInt(274))
+	i.env.DefineConstant("FILTER_VALIDATE_IP", runtime.NewInt(275))
+	i.env.DefineConstant("FILTER_VALIDATE_MAC", runtime.NewInt(276))
+	i.env.DefineConstant("FILTER_VALIDATE_DOMAIN", runtime.NewInt(277))
+
+	// Filter constants - Sanitization
+	i.env.DefineConstant("FILTER_SANITIZE_STRING", runtime.NewInt(513))
+	i.env.DefineConstant("FILTER_SANITIZE_STRIPPED", runtime.NewInt(513))
+	i.env.DefineConstant("FILTER_SANITIZE_ENCODED", runtime.NewInt(514))
+	i.env.DefineConstant("FILTER_SANITIZE_SPECIAL_CHARS", runtime.NewInt(515))
+	i.env.DefineConstant("FILTER_SANITIZE_EMAIL", runtime.NewInt(517))
+	i.env.DefineConstant("FILTER_SANITIZE_URL", runtime.NewInt(518))
+	i.env.DefineConstant("FILTER_SANITIZE_NUMBER_INT", runtime.NewInt(519))
+	i.env.DefineConstant("FILTER_SANITIZE_NUMBER_FLOAT", runtime.NewInt(520))
+	i.env.DefineConstant("FILTER_SANITIZE_FULL_SPECIAL_CHARS", runtime.NewInt(522))
+
+	// Filter constants - Other
+	i.env.DefineConstant("FILTER_DEFAULT", runtime.NewInt(516))
+	i.env.DefineConstant("FILTER_UNSAFE_RAW", runtime.NewInt(516))
+	i.env.DefineConstant("FILTER_CALLBACK", runtime.NewInt(1024))
+	i.env.DefineConstant("FILTER_NULL_ON_FAILURE", runtime.NewInt(134217728))
+	i.env.DefineConstant("FILTER_REQUIRE_SCALAR", runtime.NewInt(33554432))
+	i.env.DefineConstant("FILTER_REQUIRE_ARRAY", runtime.NewInt(16777216))
+	i.env.DefineConstant("FILTER_FORCE_ARRAY", runtime.NewInt(67108864))
+
+	// Filter flags
+	i.env.DefineConstant("FILTER_FLAG_NONE", runtime.NewInt(0))
+	i.env.DefineConstant("FILTER_FLAG_STRIP_LOW", runtime.NewInt(4))
+	i.env.DefineConstant("FILTER_FLAG_STRIP_HIGH", runtime.NewInt(8))
+	i.env.DefineConstant("FILTER_FLAG_STRIP_BACKTICK", runtime.NewInt(512))
+	i.env.DefineConstant("FILTER_FLAG_ALLOW_FRACTION", runtime.NewInt(4096))
+	i.env.DefineConstant("FILTER_FLAG_ALLOW_THOUSAND", runtime.NewInt(8192))
+	i.env.DefineConstant("FILTER_FLAG_ALLOW_SCIENTIFIC", runtime.NewInt(16384))
+	i.env.DefineConstant("FILTER_FLAG_NO_ENCODE_QUOTES", runtime.NewInt(128))
+	i.env.DefineConstant("FILTER_FLAG_ENCODE_LOW", runtime.NewInt(16))
+	i.env.DefineConstant("FILTER_FLAG_ENCODE_HIGH", runtime.NewInt(32))
+	i.env.DefineConstant("FILTER_FLAG_ENCODE_AMP", runtime.NewInt(64))
+	i.env.DefineConstant("FILTER_FLAG_PATH_REQUIRED", runtime.NewInt(262144))
+	i.env.DefineConstant("FILTER_FLAG_QUERY_REQUIRED", runtime.NewInt(524288))
+	i.env.DefineConstant("FILTER_FLAG_IPV4", runtime.NewInt(1048576))
+	i.env.DefineConstant("FILTER_FLAG_IPV6", runtime.NewInt(2097152))
+	i.env.DefineConstant("FILTER_FLAG_NO_RES_RANGE", runtime.NewInt(4194304))
+	i.env.DefineConstant("FILTER_FLAG_NO_PRIV_RANGE", runtime.NewInt(8388608))
+	i.env.DefineConstant("FILTER_FLAG_HOSTNAME", runtime.NewInt(1048576))
+	i.env.DefineConstant("FILTER_FLAG_EMAIL_UNICODE", runtime.NewInt(1048576))
+
+	// INPUT type constants
+	i.env.DefineConstant("INPUT_POST", runtime.NewInt(0))
+	i.env.DefineConstant("INPUT_GET", runtime.NewInt(1))
+	i.env.DefineConstant("INPUT_COOKIE", runtime.NewInt(2))
+	i.env.DefineConstant("INPUT_ENV", runtime.NewInt(4))
+	i.env.DefineConstant("INPUT_SERVER", runtime.NewInt(5))
+
+	// Image type constants
+	i.env.DefineConstant("IMAGETYPE_GIF", runtime.NewInt(1))
+	i.env.DefineConstant("IMAGETYPE_JPEG", runtime.NewInt(2))
+	i.env.DefineConstant("IMAGETYPE_PNG", runtime.NewInt(3))
+	i.env.DefineConstant("IMAGETYPE_SWF", runtime.NewInt(4))
+	i.env.DefineConstant("IMAGETYPE_PSD", runtime.NewInt(5))
+	i.env.DefineConstant("IMAGETYPE_BMP", runtime.NewInt(6))
+	i.env.DefineConstant("IMAGETYPE_TIFF_II", runtime.NewInt(7))
+	i.env.DefineConstant("IMAGETYPE_TIFF_MM", runtime.NewInt(8))
+	i.env.DefineConstant("IMAGETYPE_JPC", runtime.NewInt(9))
+	i.env.DefineConstant("IMAGETYPE_JP2", runtime.NewInt(10))
+	i.env.DefineConstant("IMAGETYPE_JPX", runtime.NewInt(11))
+	i.env.DefineConstant("IMAGETYPE_JB2", runtime.NewInt(12))
+	i.env.DefineConstant("IMAGETYPE_SWC", runtime.NewInt(13))
+	i.env.DefineConstant("IMAGETYPE_IFF", runtime.NewInt(14))
+	i.env.DefineConstant("IMAGETYPE_WBMP", runtime.NewInt(15))
+	i.env.DefineConstant("IMAGETYPE_XBM", runtime.NewInt(16))
+	i.env.DefineConstant("IMAGETYPE_ICO", runtime.NewInt(17))
+	i.env.DefineConstant("IMAGETYPE_WEBP", runtime.NewInt(18))
+
+	// Sort flags
+	i.env.DefineConstant("SORT_REGULAR", runtime.NewInt(0))
+	i.env.DefineConstant("SORT_NUMERIC", runtime.NewInt(1))
+	i.env.DefineConstant("SORT_STRING", runtime.NewInt(2))
+	i.env.DefineConstant("SORT_LOCALE_STRING", runtime.NewInt(5))
+	i.env.DefineConstant("SORT_NATURAL", runtime.NewInt(6))
+	i.env.DefineConstant("SORT_FLAG_CASE", runtime.NewInt(8))
+
+	// Array constants
+	i.env.DefineConstant("ARRAY_FILTER_USE_KEY", runtime.NewInt(2))
+	i.env.DefineConstant("ARRAY_FILTER_USE_BOTH", runtime.NewInt(3))
+
+	// Case constants
+	i.env.DefineConstant("CASE_LOWER", runtime.NewInt(0))
+	i.env.DefineConstant("CASE_UPPER", runtime.NewInt(1))
+
+	// String padding constants
+	i.env.DefineConstant("STR_PAD_LEFT", runtime.NewInt(0))
+	i.env.DefineConstant("STR_PAD_RIGHT", runtime.NewInt(1))
+	i.env.DefineConstant("STR_PAD_BOTH", runtime.NewInt(2))
+
+	// JSON constants
+	i.env.DefineConstant("JSON_ERROR_NONE", runtime.NewInt(0))
+	i.env.DefineConstant("JSON_ERROR_DEPTH", runtime.NewInt(1))
+	i.env.DefineConstant("JSON_ERROR_STATE_MISMATCH", runtime.NewInt(2))
+	i.env.DefineConstant("JSON_ERROR_CTRL_CHAR", runtime.NewInt(3))
+	i.env.DefineConstant("JSON_ERROR_SYNTAX", runtime.NewInt(4))
+	i.env.DefineConstant("JSON_ERROR_UTF8", runtime.NewInt(5))
+	i.env.DefineConstant("JSON_HEX_TAG", runtime.NewInt(1))
+	i.env.DefineConstant("JSON_HEX_AMP", runtime.NewInt(2))
+	i.env.DefineConstant("JSON_HEX_APOS", runtime.NewInt(4))
+	i.env.DefineConstant("JSON_HEX_QUOT", runtime.NewInt(8))
+	i.env.DefineConstant("JSON_FORCE_OBJECT", runtime.NewInt(16))
+	i.env.DefineConstant("JSON_NUMERIC_CHECK", runtime.NewInt(32))
+	i.env.DefineConstant("JSON_PRETTY_PRINT", runtime.NewInt(128))
+	i.env.DefineConstant("JSON_UNESCAPED_SLASHES", runtime.NewInt(64))
+	i.env.DefineConstant("JSON_UNESCAPED_UNICODE", runtime.NewInt(256))
+	i.env.DefineConstant("JSON_THROW_ON_ERROR", runtime.NewInt(4194304))
+
+	// File constants
+	i.env.DefineConstant("FILE_USE_INCLUDE_PATH", runtime.NewInt(1))
+	i.env.DefineConstant("FILE_IGNORE_NEW_LINES", runtime.NewInt(2))
+	i.env.DefineConstant("FILE_SKIP_EMPTY_LINES", runtime.NewInt(4))
+	i.env.DefineConstant("FILE_APPEND", runtime.NewInt(8))
+	i.env.DefineConstant("LOCK_EX", runtime.NewInt(2))
+	i.env.DefineConstant("LOCK_SH", runtime.NewInt(1))
+	i.env.DefineConstant("LOCK_UN", runtime.NewInt(3))
+	i.env.DefineConstant("LOCK_NB", runtime.NewInt(4))
+
+	// Seek constants
+	i.env.DefineConstant("SEEK_SET", runtime.NewInt(0))
+	i.env.DefineConstant("SEEK_CUR", runtime.NewInt(1))
+	i.env.DefineConstant("SEEK_END", runtime.NewInt(2))
+
+	// Directory constants
+	i.env.DefineConstant("SCANDIR_SORT_ASCENDING", runtime.NewInt(0))
+	i.env.DefineConstant("SCANDIR_SORT_DESCENDING", runtime.NewInt(1))
+	i.env.DefineConstant("SCANDIR_SORT_NONE", runtime.NewInt(2))
+	i.env.DefineConstant("GLOB_MARK", runtime.NewInt(1))
+	i.env.DefineConstant("GLOB_NOSORT", runtime.NewInt(2))
+	i.env.DefineConstant("GLOB_NOCHECK", runtime.NewInt(4))
+	i.env.DefineConstant("GLOB_NOESCAPE", runtime.NewInt(8))
+	i.env.DefineConstant("GLOB_BRACE", runtime.NewInt(16))
+	i.env.DefineConstant("GLOB_ONLYDIR", runtime.NewInt(32))
+
+	// Pathinfo constants
+	i.env.DefineConstant("PATHINFO_DIRNAME", runtime.NewInt(1))
+	i.env.DefineConstant("PATHINFO_BASENAME", runtime.NewInt(2))
+	i.env.DefineConstant("PATHINFO_EXTENSION", runtime.NewInt(4))
+	i.env.DefineConstant("PATHINFO_FILENAME", runtime.NewInt(8))
+
+	// PREG constants
+	i.env.DefineConstant("PREG_PATTERN_ORDER", runtime.NewInt(1))
+	i.env.DefineConstant("PREG_SET_ORDER", runtime.NewInt(2))
+	i.env.DefineConstant("PREG_OFFSET_CAPTURE", runtime.NewInt(256))
+	i.env.DefineConstant("PREG_UNMATCHED_AS_NULL", runtime.NewInt(512))
+	i.env.DefineConstant("PREG_SPLIT_NO_EMPTY", runtime.NewInt(1))
+	i.env.DefineConstant("PREG_SPLIT_DELIM_CAPTURE", runtime.NewInt(2))
+	i.env.DefineConstant("PREG_SPLIT_OFFSET_CAPTURE", runtime.NewInt(4))
+
+	// Math constants
+	i.env.DefineConstant("M_PI", runtime.NewFloat(3.14159265358979323846))
+	i.env.DefineConstant("M_E", runtime.NewFloat(2.71828182845904523536))
+	i.env.DefineConstant("M_LOG2E", runtime.NewFloat(1.44269504088896340736))
+	i.env.DefineConstant("M_LOG10E", runtime.NewFloat(0.43429448190325182765))
+	i.env.DefineConstant("M_LN2", runtime.NewFloat(0.69314718055994530942))
+	i.env.DefineConstant("M_LN10", runtime.NewFloat(2.30258509299404568402))
+	i.env.DefineConstant("M_SQRT2", runtime.NewFloat(1.41421356237309504880))
+	i.env.DefineConstant("M_SQRT3", runtime.NewFloat(1.73205080756887729352))
+	i.env.DefineConstant("PHP_INT_MAX", runtime.NewInt(9223372036854775807))
+	i.env.DefineConstant("PHP_INT_MIN", runtime.NewInt(-9223372036854775808))
+	i.env.DefineConstant("PHP_INT_SIZE", runtime.NewInt(8))
+	i.env.DefineConstant("PHP_FLOAT_MAX", runtime.NewFloat(1.7976931348623157e+308))
+	i.env.DefineConstant("PHP_FLOAT_MIN", runtime.NewFloat(2.2250738585072014e-308))
+
+	// Boolean constants
+	i.env.DefineConstant("TRUE", runtime.TRUE)
+	i.env.DefineConstant("FALSE", runtime.FALSE)
+	i.env.DefineConstant("NULL", runtime.NULL)
+
+	// PHP version constants
+	i.env.DefineConstant("PHP_VERSION", runtime.NewString("8.2.0"))
+	i.env.DefineConstant("PHP_MAJOR_VERSION", runtime.NewInt(8))
+	i.env.DefineConstant("PHP_MINOR_VERSION", runtime.NewInt(2))
+	i.env.DefineConstant("PHP_RELEASE_VERSION", runtime.NewInt(0))
+	i.env.DefineConstant("PHP_VERSION_ID", runtime.NewInt(80200))
+	i.env.DefineConstant("PHP_EOL", runtime.NewString("\n"))
+	i.env.DefineConstant("PHP_OS", runtime.NewString(goruntime.GOOS))
+	i.env.DefineConstant("PHP_OS_FAMILY", runtime.NewString(getOSFamily()))
+	i.env.DefineConstant("DIRECTORY_SEPARATOR", runtime.NewString(string(filepath.Separator)))
+	i.env.DefineConstant("PATH_SEPARATOR", runtime.NewString(string(os.PathListSeparator)))
+}
+
+func getOSFamily() string {
+	switch goruntime.GOOS {
+	case "linux", "android":
+		return "Linux"
+	case "darwin", "ios":
+		return "Darwin"
+	case "windows":
+		return "Windows"
+	case "freebsd", "netbsd", "openbsd", "dragonfly":
+		return "BSD"
+	case "solaris", "illumos":
+		return "Solaris"
+	default:
+		return "Unknown"
+	}
 }
 
 func (i *Interpreter) registerSPLExceptions() {
@@ -272,6 +502,63 @@ func (i *Interpreter) registerIteratorInterfaces() {
 		},
 	}
 	i.env.DefineInterface("Iterator", iterator)
+
+	// Serializable interface
+	serializable := &runtime.Interface{
+		Name: "Serializable",
+		Methods: map[string]*runtime.Method{
+			"serialize": {
+				Name:     "serialize",
+				Params:   []string{},
+				IsPublic: true,
+			},
+			"unserialize": {
+				Name:     "unserialize",
+				Params:   []string{"data"},
+				IsPublic: true,
+			},
+		},
+	}
+	i.env.DefineInterface("Serializable", serializable)
+
+	// JsonSerializable interface
+	jsonSerializable := &runtime.Interface{
+		Name: "JsonSerializable",
+		Methods: map[string]*runtime.Method{
+			"jsonSerialize": {
+				Name:     "jsonSerialize",
+				Params:   []string{},
+				IsPublic: true,
+			},
+		},
+	}
+	i.env.DefineInterface("JsonSerializable", jsonSerializable)
+
+	// Countable interface
+	countable := &runtime.Interface{
+		Name: "Countable",
+		Methods: map[string]*runtime.Method{
+			"count": {
+				Name:     "count",
+				Params:   []string{},
+				IsPublic: true,
+			},
+		},
+	}
+	i.env.DefineInterface("Countable", countable)
+
+	// Stringable interface (PHP 8.0+)
+	stringable := &runtime.Interface{
+		Name: "Stringable",
+		Methods: map[string]*runtime.Method{
+			"__toString": {
+				Name:     "__toString",
+				Params:   []string{},
+				IsPublic: true,
+			},
+		},
+	}
+	i.env.DefineInterface("Stringable", stringable)
 }
 
 func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {

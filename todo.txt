@@ -96,7 +96,7 @@ Error Handling:
   [X] set_exception_handler() / restore_exception_handler()
   [X] trigger_error() - trigger user errors
   [X] error_reporting() - get/set error reporting level
-  [ ] E_WARNING, E_NOTICE, E_DEPRECATED levels (currently only E_ERROR)
+  [X] E_WARNING, E_NOTICE, E_DEPRECATED levels (currently only E_ERROR)
 
 Additional String Functions (commonly used by WP):
   [X] parse_url() - parse URL into components
@@ -157,7 +157,7 @@ Filter/Validation Functions:
   [X] filter_var() - filter a variable
   [X] filter_input() - get and filter input
   [X] filter_var_array() / filter_input_array()
-  [ ] FILTER_* constants (FILTER_VALIDATE_EMAIL, etc.)
+  [X] FILTER_* constants (FILTER_VALIDATE_EMAIL, etc.)
 
 Additional Encoding Functions:
   [X] convert_uuencode() / convert_uudecode()
@@ -178,8 +178,8 @@ Variable Handling:
   [X] var_export() - export variable as PHP code
 
 Object Serialization:
-  [ ] Serializable interface
-  [ ] JsonSerializable interface
+  [X] Serializable interface
+  [X] JsonSerializable interface
   [ ] __serialize() / __unserialize() magic methods (PHP 7.4+)
 
 Stream Functions:
