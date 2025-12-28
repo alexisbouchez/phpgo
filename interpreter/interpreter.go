@@ -1051,28 +1051,8 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 	oldEnv := i.env
 	i.env = env
 
-	// Bind parameters
-	argVals := i.evalArgsInEnv(oldEnv, args)
-	numParams := len(fn.Params)
-
-	for idx, param := range fn.Params {
-		// Check if this is the variadic param (last one and fn.Variadic is true)
-		isVariadicParam := fn.Variadic && idx == numParams-1
-
-		if isVariadicParam {
-			// Collect remaining args into an array
-			variadicArr := runtime.NewArray()
-			for j := idx; j < len(argVals); j++ {
-				variadicArr.Set(nil, argVals[j])
-			}
-			env.Set(param, variadicArr)
-		} else if idx < len(argVals) {
-			env.Set(param, argVals[idx])
-		} else if fn.Defaults != nil && idx < len(fn.Defaults) && fn.Defaults[idx] != nil {
-			// Use default value
-			env.Set(param, fn.Defaults[idx])
-		}
-	}
+	// Bind parameters with named argument support
+	i.bindParams(env, oldEnv, fn.Params, fn.Defaults, fn.Variadic, args)
 
 	// Execute body
 	var result runtime.Value = runtime.NULL
@@ -1112,6 +1092,96 @@ func (i *Interpreter) evalArgsInEnv(env *runtime.Environment, args *ast.Argument
 	}
 	i.env = oldEnv
 	return result
+}
+
+// bindParams binds arguments to parameters with named argument support
+func (i *Interpreter) bindParams(env, evalEnv *runtime.Environment, params []string, defaults []runtime.Value, variadic bool, args *ast.ArgumentList) {
+	if args == nil {
+		// Use defaults for all params
+		for idx, param := range params {
+			if defaults != nil && idx < len(defaults) && defaults[idx] != nil {
+				env.Set(param, defaults[idx])
+			}
+		}
+		return
+	}
+
+	// Build param index map
+	paramIndex := make(map[string]int)
+	for idx, param := range params {
+		paramIndex[param] = idx
+	}
+
+	// Evaluate args and separate positional from named
+	oldEnv := i.env
+	i.env = evalEnv
+
+	bound := make([]runtime.Value, len(params))
+	boundSet := make([]bool, len(params))
+	var variadicArgs []runtime.Value
+	positionalIdx := 0
+
+	for _, arg := range args.Args {
+		val := i.evalExpr(arg.Value)
+
+		if arg.Unpack {
+			// Spread operator
+			if arr, ok := val.(*runtime.Array); ok {
+				for _, k := range arr.Keys {
+					if positionalIdx < len(params) {
+						isVariadicParam := variadic && positionalIdx == len(params)-1
+						if isVariadicParam {
+							variadicArgs = append(variadicArgs, arr.Elements[k])
+						} else {
+							bound[positionalIdx] = arr.Elements[k]
+							boundSet[positionalIdx] = true
+							positionalIdx++
+						}
+					} else if variadic {
+						variadicArgs = append(variadicArgs, arr.Elements[k])
+					}
+				}
+			}
+		} else if arg.Name != nil {
+			// Named argument
+			name := arg.Name.Name
+			if idx, ok := paramIndex[name]; ok {
+				bound[idx] = val
+				boundSet[idx] = true
+			}
+		} else {
+			// Positional argument
+			if positionalIdx < len(params) {
+				isVariadicParam := variadic && positionalIdx == len(params)-1
+				if isVariadicParam {
+					variadicArgs = append(variadicArgs, val)
+				} else {
+					bound[positionalIdx] = val
+					boundSet[positionalIdx] = true
+					positionalIdx++
+				}
+			} else if variadic {
+				variadicArgs = append(variadicArgs, val)
+			}
+		}
+	}
+	i.env = oldEnv
+
+	// Set params in env
+	for idx, param := range params {
+		isVariadicParam := variadic && idx == len(params)-1
+		if isVariadicParam {
+			variadicArr := runtime.NewArray()
+			for _, v := range variadicArgs {
+				variadicArr.Set(nil, v)
+			}
+			env.Set(param, variadicArr)
+		} else if boundSet[idx] {
+			env.Set(param, bound[idx])
+		} else if defaults != nil && idx < len(defaults) && defaults[idx] != nil {
+			env.Set(param, defaults[idx])
+		}
+	}
 }
 
 func (i *Interpreter) evalMethodCall(e *ast.MethodCallExpr) runtime.Value {
@@ -1164,24 +1234,8 @@ func (i *Interpreter) evalMethodCall(e *ast.MethodCallExpr) runtime.Value {
 	i.currentClass = foundClass.Name
 	i.currentThis = objVal
 
-	// Bind parameters
-	argVals := i.evalArgsInEnv(oldEnv, e.Args)
-	numParams := len(method.Params)
-	for idx, param := range method.Params {
-		isVariadicParam := method.Variadic && idx == numParams-1
-
-		if isVariadicParam {
-			variadicArr := runtime.NewArray()
-			for j := idx; j < len(argVals); j++ {
-				variadicArr.Set(nil, argVals[j])
-			}
-			env.Set(param, variadicArr)
-		} else if idx < len(argVals) {
-			env.Set(param, argVals[idx])
-		} else if method.Defaults != nil && idx < len(method.Defaults) && method.Defaults[idx] != nil {
-			env.Set(param, method.Defaults[idx])
-		}
-	}
+	// Bind parameters with named argument support
+	i.bindParams(env, oldEnv, method.Params, method.Defaults, method.Variadic, e.Args)
 
 	// Execute body
 	var result runtime.Value = runtime.NULL
@@ -1323,23 +1377,8 @@ func (i *Interpreter) invokeMethod(obj *runtime.Object, method *runtime.Method, 
 	i.currentClass = foundClass.Name
 	i.currentThis = obj
 
-	// Bind parameters
-	argVals := i.evalArgsInEnv(oldEnv, args)
-	numParams := len(method.Params)
-	for idx, param := range method.Params {
-		isVariadicParam := method.Variadic && idx == numParams-1
-		if isVariadicParam {
-			variadicArr := runtime.NewArray()
-			for j := idx; j < len(argVals); j++ {
-				variadicArr.Set(nil, argVals[j])
-			}
-			env.Set(param, variadicArr)
-		} else if idx < len(argVals) {
-			env.Set(param, argVals[idx])
-		} else if method.Defaults != nil && idx < len(method.Defaults) && method.Defaults[idx] != nil {
-			env.Set(param, method.Defaults[idx])
-		}
-	}
+	// Bind parameters with named argument support
+	i.bindParams(env, oldEnv, method.Params, method.Defaults, method.Variadic, args)
 
 	var result runtime.Value = runtime.NULL
 	if block, ok := method.Body.(*ast.BlockStmt); ok {

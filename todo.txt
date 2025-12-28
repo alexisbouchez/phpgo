@@ -1,8 +1,6 @@
 HIGH PRIORITY
 - Generators (yield/yield from)
-- Named arguments
 - Constructor property promotion
-- exit/die
 - Proper namespace resolution
 
 MEDIUM PRIORITY

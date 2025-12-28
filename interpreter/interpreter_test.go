@@ -1751,3 +1751,62 @@ func TestEvalDieWithMessage(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+func TestEvalNamedArguments(t *testing.T) {
+	input := `<?php
+	function greet($name, $greeting = "Hello") {
+		return "$greeting, $name!";
+	}
+	echo greet(name: "World");
+	`
+	expected := "Hello, World!"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamedArgumentsReorder(t *testing.T) {
+	input := `<?php
+	function sub($a, $b) {
+		return $a - $b;
+	}
+	echo sub(b: 3, a: 10);
+	`
+	expected := "7"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamedArgumentsSkipDefaults(t *testing.T) {
+	input := `<?php
+	function test($a, $b = 2, $c = 3) {
+		return $a + $b + $c;
+	}
+	echo test(1, c: 10);
+	`
+	expected := "13"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalNamedArgumentsMethod(t *testing.T) {
+	input := `<?php
+	class Calculator {
+		public function add($x, $y) {
+			return $x + $y;
+		}
+	}
+	$calc = new Calculator();
+	echo $calc->add(y: 30, x: 12);
+	`
+	expected := "42"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
