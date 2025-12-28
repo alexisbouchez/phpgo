@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -582,6 +583,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinIp2long
 	case "long2ip":
 		return builtinLong2ip
+	case "gethostbyname":
+		return builtinGethostbyname
+	case "gethostbyaddr":
+		return builtinGethostbyaddr
 
 	default:
 		return nil
@@ -5783,4 +5788,44 @@ func builtinLong2ip(args ...runtime.Value) runtime.Value {
 
 	ipStr := fmt.Sprintf("%d.%d.%d.%d", octet1, octet2, octet3, octet4)
 	return runtime.NewString(ipStr)
+}
+
+func builtinGethostbyname(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	hostname := args[0].ToString()
+
+	// Look up IP addresses for the hostname
+	addrs, err := net.LookupHost(hostname)
+	if err != nil || len(addrs) == 0 {
+		// Return the hostname itself if lookup fails (PHP behavior)
+		return runtime.NewString(hostname)
+	}
+
+	// Return the first IP address
+	return runtime.NewString(addrs[0])
+}
+
+func builtinGethostbyaddr(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	ipAddr := args[0].ToString()
+
+	// Look up hostnames for the IP address
+	names, err := net.LookupAddr(ipAddr)
+	if err != nil || len(names) == 0 {
+		// Return the IP address itself if lookup fails (PHP behavior)
+		return runtime.NewString(ipAddr)
+	}
+
+	// Return the first hostname (remove trailing dot if present)
+	hostname := names[0]
+	if strings.HasSuffix(hostname, ".") {
+		hostname = hostname[:len(hostname)-1]
+	}
+	return runtime.NewString(hostname)
 }
