@@ -2,7 +2,6 @@ HIGH PRIORITY
 
 MEDIUM PRIORITY
 - Serialization (__sleep/__wakeup, serialize/unserialize)
-- ArrayAccess interface
 - Iterator/Traversable
 
 LOWER PRIORITY

@@ -156,6 +156,15 @@ func (i *Interpreter) evalStmt(stmt ast.Stmt) runtime.Value {
 						key := i.evalExpr(arrExpr.Index)
 						arr.Unset(key)
 					}
+				} else if obj, ok := arrVal.(*runtime.Object); ok {
+					// Check for ArrayAccess interface
+					if i.implementsInterface(obj.Class, "ArrayAccess") {
+						var key runtime.Value = runtime.NULL
+						if arrExpr.Index != nil {
+							key = i.evalExpr(arrExpr.Index)
+						}
+						i.callArrayAccessMethod(obj, "offsetUnset", []runtime.Value{key})
+					}
 				}
 			}
 		}
@@ -892,6 +901,15 @@ func (i *Interpreter) assignTo(target ast.Expr, val runtime.Value) runtime.Value
 			} else {
 				key := i.evalExpr(t.Index)
 				arrVal.Set(key, val)
+			}
+		} else if obj, ok := arr.(*runtime.Object); ok {
+			// Check for ArrayAccess interface
+			if i.implementsInterface(obj.Class, "ArrayAccess") {
+				var key runtime.Value = runtime.NULL
+				if t.Index != nil {
+					key = i.evalExpr(t.Index)
+				}
+				i.callArrayAccessMethod(obj, "offsetSet", []runtime.Value{key, val})
 			}
 		}
 	case *ast.PropertyFetchExpr:
@@ -1774,6 +1792,16 @@ func (i *Interpreter) evalArrayAccess(e *ast.ArrayAccessExpr) runtime.Value {
 		}
 		return runtime.NewString("")
 	}
+	// Check for ArrayAccess interface
+	if obj, ok := arr.(*runtime.Object); ok {
+		if i.implementsInterface(obj.Class, "ArrayAccess") {
+			var key runtime.Value = runtime.NULL
+			if e.Index != nil {
+				key = i.evalExpr(e.Index)
+			}
+			return i.callArrayAccessMethod(obj, "offsetGet", []runtime.Value{key})
+		}
+	}
 	return runtime.NULL
 }
 
@@ -2093,6 +2121,34 @@ func (i *Interpreter) evalIsset(e *ast.IssetExpr) runtime.Value {
 				return runtime.FALSE
 			}
 			return runtime.FALSE
+		} else if arrExpr, ok := v.(*ast.ArrayAccessExpr); ok {
+			// Array access - check for ArrayAccess interface
+			arrVal := i.evalExpr(arrExpr.Array)
+			if arr, ok := arrVal.(*runtime.Array); ok {
+				if arrExpr.Index == nil {
+					return runtime.FALSE
+				}
+				key := i.evalExpr(arrExpr.Index)
+				val := arr.Get(key)
+				if _, ok := val.(*runtime.Null); ok {
+					return runtime.FALSE
+				}
+			} else if obj, ok := arrVal.(*runtime.Object); ok {
+				if i.implementsInterface(obj.Class, "ArrayAccess") {
+					var key runtime.Value = runtime.NULL
+					if arrExpr.Index != nil {
+						key = i.evalExpr(arrExpr.Index)
+					}
+					result := i.callArrayAccessMethod(obj, "offsetExists", []runtime.Value{key})
+					if !result.ToBool() {
+						return runtime.FALSE
+					}
+				} else {
+					return runtime.FALSE
+				}
+			} else {
+				return runtime.FALSE
+			}
 		} else {
 			val := i.evalExpr(v)
 			if _, ok := val.(*runtime.Null); ok {
@@ -2751,4 +2807,61 @@ func (i *Interpreter) resolveFunctionName(name string) string {
 	}
 
 	return name
+}
+
+// ----------------------------------------------------------------------------
+// ArrayAccess interface support
+
+// implementsInterface checks if a class implements a specific interface
+func (i *Interpreter) implementsInterface(class *runtime.Class, ifaceName string) bool {
+	for _, iface := range class.Interfaces {
+		if iface.Name == ifaceName {
+			return true
+		}
+	}
+	if class.Parent != nil {
+		return i.implementsInterface(class.Parent, ifaceName)
+	}
+	return false
+}
+
+// callArrayAccessMethod calls an ArrayAccess method on an object
+func (i *Interpreter) callArrayAccessMethod(obj *runtime.Object, methodName string, args []runtime.Value) runtime.Value {
+	method, foundClass := i.findMethod(obj.Class, methodName)
+	if method == nil {
+		return runtime.NULL
+	}
+
+	env := runtime.NewEnclosedEnvironment(i.env)
+	env.Set("this", obj)
+	oldEnv := i.env
+	oldClass := i.currentClass
+	oldThis := i.currentThis
+	oldFuncArgs := i.currentFuncArgs
+	i.env = env
+	i.currentClass = foundClass.Name
+	i.currentThis = obj
+	i.currentFuncArgs = args
+
+	// Bind parameters
+	for idx, param := range method.Params {
+		if idx < len(args) {
+			env.Set(param, args[idx])
+		}
+	}
+
+	var result runtime.Value = runtime.NULL
+	if block, ok := method.Body.(*ast.BlockStmt); ok {
+		result = i.evalBlock(block)
+	}
+
+	i.env = oldEnv
+	i.currentClass = oldClass
+	i.currentThis = oldThis
+	i.currentFuncArgs = oldFuncArgs
+
+	if ret, ok := result.(*runtime.ReturnValue); ok {
+		return ret.Value
+	}
+	return result
 }

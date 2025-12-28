@@ -2229,3 +2229,193 @@ func TestFuncGetArgsEmpty(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ArrayAccess interface tests
+
+func TestArrayAccessOffsetGet(t *testing.T) {
+	input := `<?php
+	class Container implements ArrayAccess {
+		private $data = [];
+
+		public function offsetExists($offset) {
+			return isset($this->data[$offset]);
+		}
+
+		public function offsetGet($offset) {
+			return $this->data[$offset] ?? null;
+		}
+
+		public function offsetSet($offset, $value) {
+			if ($offset === null) {
+				$this->data[] = $value;
+			} else {
+				$this->data[$offset] = $value;
+			}
+		}
+
+		public function offsetUnset($offset) {
+			unset($this->data[$offset]);
+		}
+
+		public function __construct() {
+			$this->data = ['a' => 1, 'b' => 2, 'c' => 3];
+		}
+	}
+
+	$c = new Container();
+	echo $c['a'] . ',' . $c['b'] . ',' . $c['c'];
+	`
+	expected := "1,2,3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestArrayAccessOffsetSet(t *testing.T) {
+	input := `<?php
+	class Container implements ArrayAccess {
+		private $data = [];
+
+		public function offsetExists($offset) {
+			return isset($this->data[$offset]);
+		}
+
+		public function offsetGet($offset) {
+			return $this->data[$offset] ?? null;
+		}
+
+		public function offsetSet($offset, $value) {
+			if ($offset === null) {
+				$this->data[] = $value;
+			} else {
+				$this->data[$offset] = $value;
+			}
+		}
+
+		public function offsetUnset($offset) {
+			unset($this->data[$offset]);
+		}
+	}
+
+	$c = new Container();
+	$c['x'] = 10;
+	$c['y'] = 20;
+	echo $c['x'] . ',' . $c['y'];
+	`
+	expected := "10,20"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestArrayAccessOffsetExists(t *testing.T) {
+	input := `<?php
+	class Container implements ArrayAccess {
+		private $data = ['key' => 'value'];
+
+		public function offsetExists($offset) {
+			return isset($this->data[$offset]);
+		}
+
+		public function offsetGet($offset) {
+			return $this->data[$offset] ?? null;
+		}
+
+		public function offsetSet($offset, $value) {
+			$this->data[$offset] = $value;
+		}
+
+		public function offsetUnset($offset) {
+			unset($this->data[$offset]);
+		}
+	}
+
+	$c = new Container();
+	$exists = isset($c['key']) ? 'yes' : 'no';
+	$notExists = isset($c['missing']) ? 'yes' : 'no';
+	echo $exists . ',' . $notExists;
+	`
+	expected := "yes,no"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestArrayAccessOffsetUnset(t *testing.T) {
+	input := `<?php
+	class Container implements ArrayAccess {
+		private $data = ['a' => 1, 'b' => 2];
+
+		public function offsetExists($offset) {
+			return isset($this->data[$offset]);
+		}
+
+		public function offsetGet($offset) {
+			return $this->data[$offset] ?? null;
+		}
+
+		public function offsetSet($offset, $value) {
+			$this->data[$offset] = $value;
+		}
+
+		public function offsetUnset($offset) {
+			unset($this->data[$offset]);
+		}
+	}
+
+	$c = new Container();
+	unset($c['a']);
+	$exists = isset($c['a']) ? 'yes' : 'no';
+	echo $exists;
+	`
+	expected := "no"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestArrayAccessAppend(t *testing.T) {
+	input := `<?php
+	class Container implements ArrayAccess {
+		private $data = [];
+
+		public function offsetExists($offset) {
+			return isset($this->data[$offset]);
+		}
+
+		public function offsetGet($offset) {
+			return $this->data[$offset] ?? null;
+		}
+
+		public function offsetSet($offset, $value) {
+			if ($offset === null) {
+				$this->data[] = $value;
+			} else {
+				$this->data[$offset] = $value;
+			}
+		}
+
+		public function offsetUnset($offset) {
+			unset($this->data[$offset]);
+		}
+
+		public function getData() {
+			return $this->data;
+		}
+	}
+
+	$c = new Container();
+	$c[] = 'first';
+	$c[] = 'second';
+	echo $c[0] . ',' . $c[1];
+	`
+	expected := "first,second"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

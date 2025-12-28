@@ -20,7 +20,38 @@ import (
 )
 
 func (i *Interpreter) registerBuiltins() {
-	// Register all builtins
+	// Register built-in interfaces
+	i.registerArrayAccessInterface()
+}
+
+func (i *Interpreter) registerArrayAccessInterface() {
+	// ArrayAccess interface with its 4 methods
+	arrayAccess := &runtime.Interface{
+		Name: "ArrayAccess",
+		Methods: map[string]*runtime.Method{
+			"offsetExists": {
+				Name:     "offsetExists",
+				Params:   []string{"offset"},
+				IsPublic: true,
+			},
+			"offsetGet": {
+				Name:     "offsetGet",
+				Params:   []string{"offset"},
+				IsPublic: true,
+			},
+			"offsetSet": {
+				Name:     "offsetSet",
+				Params:   []string{"offset", "value"},
+				IsPublic: true,
+			},
+			"offsetUnset": {
+				Name:     "offsetUnset",
+				Params:   []string{"offset"},
+				IsPublic: true,
+			},
+		},
+	}
+	i.env.DefineInterface("ArrayAccess", arrayAccess)
 }
 
 func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
