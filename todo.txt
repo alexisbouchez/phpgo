@@ -1,5 +1,4 @@
 HIGH PRIORITY
-- Generators (yield/yield from)
 - Constructor property promotion
 - Proper namespace resolution
 

@@ -384,12 +384,13 @@ type Trait struct {
 // Function
 
 type Function struct {
-	Name     string
-	Params   []string
-	Defaults []Value // Default values for each parameter (nil if no default)
-	Variadic bool    // Last param is variadic (...$args)
-	Body     interface{} // *ast.BlockStmt
-	Env      *Environment
+	Name        string
+	Params      []string
+	Defaults    []Value // Default values for each parameter (nil if no default)
+	Variadic    bool    // Last param is variadic (...$args)
+	IsGenerator bool    // Function contains yield
+	Body        interface{} // *ast.BlockStmt
+	Env         *Environment
 }
 
 func (f *Function) Type() string    { return "object" } // Closure is an object in PHP
@@ -502,6 +503,70 @@ func (e *Exit) ToInt() int64     { return int64(e.Status) }
 func (e *Exit) ToFloat() float64 { return float64(e.Status) }
 func (e *Exit) ToString() string { return e.Message }
 func (e *Exit) Inspect() string  { return fmt.Sprintf("exit(%d)", e.Status) }
+
+// ----------------------------------------------------------------------------
+// Generator
+
+type Generator struct {
+	Keys     []Value
+	Values   []Value
+	Position int
+}
+
+func NewGenerator() *Generator {
+	return &Generator{Position: 0}
+}
+
+func (g *Generator) Type() string     { return "Generator" }
+func (g *Generator) ToBool() bool     { return true }
+func (g *Generator) ToInt() int64     { return 0 }
+func (g *Generator) ToFloat() float64 { return 0 }
+func (g *Generator) ToString() string { return "Generator" }
+func (g *Generator) Inspect() string  { return "Generator" }
+
+func (g *Generator) Add(key, value Value) {
+	g.Keys = append(g.Keys, key)
+	g.Values = append(g.Values, value)
+}
+
+func (g *Generator) Valid() bool {
+	return g.Position < len(g.Values)
+}
+
+func (g *Generator) Current() Value {
+	if g.Position < len(g.Values) {
+		return g.Values[g.Position]
+	}
+	return NULL
+}
+
+func (g *Generator) Key() Value {
+	if g.Position < len(g.Keys) {
+		return g.Keys[g.Position]
+	}
+	return NULL
+}
+
+func (g *Generator) Next() {
+	g.Position++
+}
+
+func (g *Generator) Rewind() {
+	g.Position = 0
+}
+
+// Yield is a signal value returned when yield is encountered
+type Yield struct {
+	Key   Value
+	Value Value
+}
+
+func (y *Yield) Type() string     { return "yield" }
+func (y *Yield) ToBool() bool     { return false }
+func (y *Yield) ToInt() int64     { return 0 }
+func (y *Yield) ToFloat() float64 { return 0 }
+func (y *Yield) ToString() string { return "" }
+func (y *Yield) Inspect() string  { return "yield" }
 
 // ----------------------------------------------------------------------------
 // Error

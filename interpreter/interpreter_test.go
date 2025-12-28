@@ -1810,3 +1810,81 @@ func TestEvalNamedArgumentsMethod(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Generators
+
+func TestEvalGeneratorBasic(t *testing.T) {
+	input := `<?php
+	function gen() {
+		yield 1;
+		yield 2;
+		yield 3;
+	}
+	foreach (gen() as $v) {
+		echo $v;
+	}
+	`
+	expected := "123"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalGeneratorWithKeys(t *testing.T) {
+	input := `<?php
+	function gen() {
+		yield "a" => 1;
+		yield "b" => 2;
+	}
+	foreach (gen() as $k => $v) {
+		echo $k . $v;
+	}
+	`
+	expected := "a1b2"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalGeneratorYieldFrom(t *testing.T) {
+	input := `<?php
+	function inner() {
+		yield 2;
+		yield 3;
+	}
+	function outer() {
+		yield 1;
+		yield from inner();
+		yield 4;
+	}
+	foreach (outer() as $v) {
+		echo $v;
+	}
+	`
+	expected := "1234"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalGeneratorYieldFromArray(t *testing.T) {
+	input := `<?php
+	function gen() {
+		yield 1;
+		yield from [2, 3, 4];
+		yield 5;
+	}
+	foreach (gen() as $v) {
+		echo $v;
+	}
+	`
+	expected := "12345"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

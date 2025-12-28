@@ -183,7 +183,7 @@ func (i *Interpreter) evalBlock(block *ast.BlockStmt) runtime.Value {
 	for _, stmt := range block.Stmts {
 		result = i.evalStmt(stmt)
 		switch result.(type) {
-		case *runtime.ReturnValue, *runtime.Break, *runtime.Continue, *runtime.Exception, *runtime.Exit:
+		case *runtime.ReturnValue, *runtime.Break, *runtime.Continue, *runtime.Exception, *runtime.Exit, *runtime.Yield:
 			return result
 		}
 	}
@@ -309,13 +309,27 @@ func (i *Interpreter) evalFor(s *ast.ForStmt) runtime.Value {
 
 func (i *Interpreter) evalForeach(s *ast.ForeachStmt) runtime.Value {
 	arr := i.evalExpr(s.Expr)
-	arrVal, ok := arr.(*runtime.Array)
-	if !ok {
-		return runtime.NewError("foreach requires an array")
+
+	var keys []runtime.Value
+	var values map[runtime.Value]runtime.Value
+
+	switch v := arr.(type) {
+	case *runtime.Array:
+		keys = v.Keys
+		values = v.Elements
+	case *runtime.Generator:
+		// Convert generator to iteratable form
+		keys = v.Keys
+		values = make(map[runtime.Value]runtime.Value)
+		for idx, k := range v.Keys {
+			values[k] = v.Values[idx]
+		}
+	default:
+		return runtime.NewError("foreach requires an array or Traversable")
 	}
 
-	for _, key := range arrVal.Keys {
-		val := arrVal.Elements[key]
+	for _, key := range keys {
+		val := values[key]
 
 		// Set key variable if present
 		if s.KeyVar != nil {
@@ -513,6 +527,10 @@ func (i *Interpreter) evalExpr(expr ast.Expr) runtime.Value {
 		return runtime.NULL
 	case *ast.ExitExpr:
 		return i.evalExit(e)
+	case *ast.YieldExpr:
+		return i.evalYield(e)
+	case *ast.YieldFromExpr:
+		return i.evalYieldFrom(e)
 	default:
 		return runtime.NewError(fmt.Sprintf("unknown expression type: %T", expr))
 	}
@@ -1054,6 +1072,14 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 	// Bind parameters with named argument support
 	i.bindParams(env, oldEnv, fn.Params, fn.Defaults, fn.Variadic, args)
 
+	// If it's a generator, execute and collect yields
+	if fn.IsGenerator {
+		gen := runtime.NewGenerator()
+		i.executeGenerator(fn.Body.(*ast.BlockStmt), gen)
+		i.env = oldEnv
+		return gen
+	}
+
 	// Execute body
 	var result runtime.Value = runtime.NULL
 	if block, ok := fn.Body.(*ast.BlockStmt); ok {
@@ -1068,6 +1094,109 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 		return ret.Value
 	}
 	return result
+}
+
+// executeGenerator runs a generator function and collects yielded values
+func (i *Interpreter) executeGenerator(block *ast.BlockStmt, gen *runtime.Generator) {
+	i.executeGeneratorStmts(block.Stmts, gen)
+}
+
+func (i *Interpreter) executeGeneratorStmts(stmts []ast.Stmt, gen *runtime.Generator) bool {
+	for _, stmt := range stmts {
+		if i.executeGeneratorStmt(stmt, gen) {
+			return true // return encountered
+		}
+	}
+	return false
+}
+
+func (i *Interpreter) executeGeneratorStmt(stmt ast.Stmt, gen *runtime.Generator) bool {
+	switch s := stmt.(type) {
+	case *ast.ExprStmt:
+		result := i.evalExpr(s.Expr)
+		if y, ok := result.(*runtime.Yield); ok {
+			i.addYieldToGenerator(y, gen)
+		}
+	case *ast.ReturnStmt:
+		return true
+	case *ast.IfStmt:
+		cond := i.evalExpr(s.Cond)
+		if cond.ToBool() {
+			if i.executeGeneratorStmt(s.Body, gen) {
+				return true
+			}
+		} else if s.Else != nil {
+			if i.executeGeneratorStmt(s.Else.Body, gen) {
+				return true
+			}
+		}
+	case *ast.BlockStmt:
+		return i.executeGeneratorStmts(s.Stmts, gen)
+	case *ast.ForStmt:
+		for _, expr := range s.Init {
+			i.evalExpr(expr)
+		}
+		for {
+			if len(s.Cond) > 0 && !i.evalExpr(s.Cond[0]).ToBool() {
+				break
+			}
+			if i.executeGeneratorStmt(s.Body, gen) {
+				return true
+			}
+			for _, expr := range s.Loop {
+				i.evalExpr(expr)
+			}
+		}
+	case *ast.ForeachStmt:
+		arr := i.evalExpr(s.Expr)
+		if arrVal, ok := arr.(*runtime.Array); ok {
+			for _, k := range arrVal.Keys {
+				if s.KeyVar != nil {
+					keyName := s.KeyVar.(*ast.Variable).Name.(*ast.Ident).Name
+					i.env.Set(keyName, k)
+				}
+				valName := s.ValueVar.(*ast.Variable).Name.(*ast.Ident).Name
+				i.env.Set(valName, arrVal.Elements[k])
+				if i.executeGeneratorStmt(s.Body, gen) {
+					return true
+				}
+			}
+		}
+	case *ast.WhileStmt:
+		for i.evalExpr(s.Cond).ToBool() {
+			if i.executeGeneratorStmt(s.Body, gen) {
+				return true
+			}
+		}
+	default:
+		// For other statements, just evaluate normally
+		i.evalStmt(stmt)
+	}
+	return false
+}
+
+func (i *Interpreter) addYieldToGenerator(y *runtime.Yield, gen *runtime.Generator) {
+	// Check if it's a yield from (value is iterable)
+	if y.Key == nil {
+		if arr, ok := y.Value.(*runtime.Array); ok {
+			for _, k := range arr.Keys {
+				gen.Add(k, arr.Elements[k])
+			}
+			return
+		}
+		if innerGen, ok := y.Value.(*runtime.Generator); ok {
+			for idx := 0; idx < len(innerGen.Values); idx++ {
+				gen.Add(innerGen.Keys[idx], innerGen.Values[idx])
+			}
+			return
+		}
+	}
+	// Regular yield
+	key := y.Key
+	if key == nil {
+		key = runtime.NewInt(int64(len(gen.Values)))
+	}
+	gen.Add(key, y.Value)
 }
 
 func (i *Interpreter) evalArgsInEnv(env *runtime.Environment, args *ast.ArgumentList) []runtime.Value {
@@ -1878,6 +2007,23 @@ func (i *Interpreter) evalExit(e *ast.ExitExpr) runtime.Value {
 	return exit
 }
 
+func (i *Interpreter) evalYield(e *ast.YieldExpr) runtime.Value {
+	var key, value runtime.Value = nil, runtime.NULL
+	if e.Value != nil {
+		value = i.evalExpr(e.Value)
+	}
+	if e.Key != nil {
+		key = i.evalExpr(e.Key)
+	}
+	return &runtime.Yield{Key: key, Value: value}
+}
+
+func (i *Interpreter) evalYieldFrom(e *ast.YieldFromExpr) runtime.Value {
+	val := i.evalExpr(e.Expr)
+	// Return the iterable to be unpacked by the generator executor
+	return &runtime.Yield{Key: nil, Value: val}
+}
+
 func (i *Interpreter) evalIsset(e *ast.IssetExpr) runtime.Value {
 	for _, v := range e.Vars {
 		if varExpr, ok := v.(*ast.Variable); ok {
@@ -1969,16 +2115,77 @@ func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
 	}
 
 	fn := &runtime.Function{
-		Name:     s.Name.Name,
-		Params:   params,
-		Defaults: defaults,
-		Variadic: variadic,
-		Body:     s.Body,
-		Env:      i.env,
+		Name:        s.Name.Name,
+		Params:      params,
+		Defaults:    defaults,
+		Variadic:    variadic,
+		IsGenerator: containsYield(s.Body),
+		Body:        s.Body,
+		Env:         i.env,
 	}
 
 	i.env.DefineFunction(s.Name.Name, fn)
 	return runtime.NULL
+}
+
+// containsYield checks if a block contains yield expressions
+func containsYield(node interface{}) bool {
+	switch n := node.(type) {
+	case *ast.BlockStmt:
+		for _, stmt := range n.Stmts {
+			if containsYield(stmt) {
+				return true
+			}
+		}
+	case *ast.ExprStmt:
+		return containsYield(n.Expr)
+	case *ast.IfStmt:
+		if containsYield(n.Body) {
+			return true
+		}
+		if n.Else != nil && containsYield(n.Else.Body) {
+			return true
+		}
+	case *ast.ForStmt:
+		return containsYield(n.Body)
+	case *ast.ForeachStmt:
+		return containsYield(n.Body)
+	case *ast.WhileStmt:
+		return containsYield(n.Body)
+	case *ast.DoWhileStmt:
+		return containsYield(n.Body)
+	case *ast.SwitchStmt:
+		for _, c := range n.Cases {
+			for _, stmt := range c.Stmts {
+				if containsYield(stmt) {
+					return true
+				}
+			}
+		}
+	case *ast.TryStmt:
+		if containsYield(n.Body) {
+			return true
+		}
+		for _, c := range n.Catches {
+			if containsYield(c.Body) {
+				return true
+			}
+		}
+		if n.Finally != nil && containsYield(n.Finally.Body) {
+			return true
+		}
+	case *ast.YieldExpr, *ast.YieldFromExpr:
+		return true
+	case *ast.ReturnStmt:
+		return containsYield(n.Result)
+	case *ast.EchoStmt:
+		for _, expr := range n.Exprs {
+			if containsYield(expr) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
