@@ -251,6 +251,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinSqrt
 	case "fdiv":
 		return builtinFdiv
+	case "intdiv":
+		return builtinIntdiv
+	case "fmod":
+		return builtinFmod
+	case "is_finite":
+		return builtinIsFinite
+	case "is_nan":
+		return builtinIsNan
+	case "is_infinite":
+		return builtinIsInfinite
 	case "rand":
 		return builtinRand
 	case "mt_rand":
@@ -2365,6 +2375,61 @@ func builtinFdiv(args ...runtime.Value) runtime.Value {
 		return runtime.NewFloat(math.Inf(-1))
 	}
 	return runtime.NewFloat(dividend / divisor)
+}
+
+func builtinIntdiv(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+	dividend := args[0].ToInt()
+	divisor := args[1].ToInt()
+	if divisor == 0 {
+		// In PHP, intdiv throws DivisionByZeroError, here we return 0
+		return runtime.NewInt(0)
+	}
+	return runtime.NewInt(dividend / divisor)
+}
+
+func builtinFmod(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewFloat(0)
+	}
+	x := args[0].ToFloat()
+	y := args[1].ToFloat()
+	return runtime.NewFloat(math.Mod(x, y))
+}
+
+func builtinIsFinite(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	f := args[0].ToFloat()
+	if math.IsInf(f, 0) || math.IsNaN(f) {
+		return runtime.FALSE
+	}
+	return runtime.TRUE
+}
+
+func builtinIsNan(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	f := args[0].ToFloat()
+	if math.IsNaN(f) {
+		return runtime.TRUE
+	}
+	return runtime.FALSE
+}
+
+func builtinIsInfinite(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	f := args[0].ToFloat()
+	if math.IsInf(f, 0) {
+		return runtime.TRUE
+	}
+	return runtime.FALSE
 }
 
 func builtinRand(args ...runtime.Value) runtime.Value {
