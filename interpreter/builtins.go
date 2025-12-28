@@ -465,6 +465,18 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "str_ireplace":
 		return builtinStrIreplace
 
+	// Additional array functions
+	case "asort":
+		return builtinAsort
+	case "arsort":
+		return builtinArsort
+	case "ksort":
+		return builtinKsort
+	case "krsort":
+		return builtinKrsort
+	case "array_splice":
+		return builtinArraySplice
+
 	default:
 		return nil
 	}
@@ -4177,4 +4189,209 @@ func builtinStrIreplace(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.NewString(result.String())
+}
+
+// ----------------------------------------------------------------------------
+// Additional array functions
+
+func builtinAsort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Sort by value, maintaining key association
+	type kvPair struct {
+		key runtime.Value
+		val runtime.Value
+	}
+
+	pairs := make([]kvPair, 0, len(arr.Keys))
+	for _, k := range arr.Keys {
+		pairs = append(pairs, kvPair{k, arr.Elements[k]})
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		vi := pairs[i].val.ToString()
+		vj := pairs[j].val.ToString()
+		return vi < vj
+	})
+
+	// Rebuild array with new order
+	arr.Keys = make([]runtime.Value, 0, len(pairs))
+	for _, p := range pairs {
+		arr.Keys = append(arr.Keys, p.key)
+	}
+
+	return runtime.TRUE
+}
+
+func builtinArsort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Reverse sort by value, maintaining key association
+	type kvPair struct {
+		key runtime.Value
+		val runtime.Value
+	}
+
+	pairs := make([]kvPair, 0, len(arr.Keys))
+	for _, k := range arr.Keys {
+		pairs = append(pairs, kvPair{k, arr.Elements[k]})
+	}
+
+	sort.Slice(pairs, func(i, j int) bool {
+		vi := pairs[i].val.ToString()
+		vj := pairs[j].val.ToString()
+		return vi > vj
+	})
+
+	// Rebuild array with new order
+	arr.Keys = make([]runtime.Value, 0, len(pairs))
+	for _, p := range pairs {
+		arr.Keys = append(arr.Keys, p.key)
+	}
+
+	return runtime.TRUE
+}
+
+func builtinKsort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Sort by key
+	sort.Slice(arr.Keys, func(i, j int) bool {
+		ki := arr.Keys[i].ToString()
+		kj := arr.Keys[j].ToString()
+		return ki < kj
+	})
+
+	return runtime.TRUE
+}
+
+func builtinKrsort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Reverse sort by key
+	sort.Slice(arr.Keys, func(i, j int) bool {
+		ki := arr.Keys[i].ToString()
+		kj := arr.Keys[j].ToString()
+		return ki > kj
+	})
+
+	return runtime.TRUE
+}
+
+func builtinArraySplice(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewArray()
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	offset := int(args[1].ToInt())
+	length := len(arr.Keys)
+
+	// Handle negative offset
+	if offset < 0 {
+		offset = len(arr.Keys) + offset
+		if offset < 0 {
+			offset = 0
+		}
+	}
+
+	// Handle length parameter
+	if len(args) >= 3 {
+		length = int(args[2].ToInt())
+		if length < 0 {
+			length = len(arr.Keys) - offset + length
+		}
+	} else {
+		length = len(arr.Keys) - offset
+	}
+
+	if offset >= len(arr.Keys) {
+		return runtime.NewArray()
+	}
+
+	if offset+length > len(arr.Keys) {
+		length = len(arr.Keys) - offset
+	}
+
+	// Extract removed elements
+	removed := runtime.NewArray()
+	for i := offset; i < offset+length && i < len(arr.Keys); i++ {
+		key := arr.Keys[i]
+		removed.Set(nil, arr.Elements[key])
+	}
+
+	// Build replacement array if provided
+	type replPair struct {
+		key runtime.Value
+		val runtime.Value
+	}
+	var replacement []replPair
+	if len(args) >= 4 {
+		if replArr, ok := args[3].(*runtime.Array); ok {
+			for _, k := range replArr.Keys {
+				replacement = append(replacement, replPair{k, replArr.Elements[k]})
+			}
+		}
+	}
+
+	// Remove elements from original array
+	for i := offset; i < offset+length && i < len(arr.Keys); i++ {
+		key := arr.Keys[i]
+		delete(arr.Elements, key)
+	}
+
+	// Build new keys slice
+	newKeys := make([]runtime.Value, 0)
+	newKeys = append(newKeys, arr.Keys[:offset]...)
+
+	// Add replacement elements
+	nextIdx := arr.NextIndex
+	for _, p := range replacement {
+		newKey := runtime.NewInt(nextIdx)
+		arr.Elements[newKey] = p.val
+		newKeys = append(newKeys, newKey)
+		nextIdx++
+	}
+
+	// Add remaining elements
+	if offset+length < len(arr.Keys) {
+		newKeys = append(newKeys, arr.Keys[offset+length:]...)
+	}
+
+	arr.Keys = newKeys
+	arr.NextIndex = nextIdx
+
+	return removed
 }
