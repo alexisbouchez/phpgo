@@ -407,6 +407,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinUksort
 	case "array_walk":
 		return i.builtinArrayWalk
+	case "array_walk_recursive":
+		return i.builtinArrayWalkRecursive
 	case "array_rand":
 		return builtinArrayRand
 	case "shuffle":
@@ -3537,6 +3539,35 @@ func (i *Interpreter) builtinArrayWalk(args ...runtime.Value) runtime.Value {
 		val := arr.Elements[key]
 		i.callFunctionWithArgs(callback, []runtime.Value{val, key})
 	}
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinArrayWalkRecursive(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	callback, ok := args[1].(*runtime.Function)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	var walk func(*runtime.Array, runtime.Value)
+	walk = func(a *runtime.Array, parentKey runtime.Value) {
+		for _, key := range a.Keys {
+			val := a.Elements[key]
+			if childArr, ok := val.(*runtime.Array); ok {
+				walk(childArr, key)
+			} else {
+				i.callFunctionWithArgs(callback, []runtime.Value{val, key})
+			}
+		}
+	}
+
+	walk(arr, runtime.NULL)
 	return runtime.TRUE
 }
 
