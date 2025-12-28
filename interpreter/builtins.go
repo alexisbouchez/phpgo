@@ -392,6 +392,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinMktime
 	case "microtime":
 		return builtinMicrotime
+	case "strftime":
+		return builtinStrftime
+	case "gmstrftime":
+		return builtinGmstrftime
 
 	// Hash functions
 	case "md5":
@@ -3707,6 +3711,118 @@ func builtinMicrotime(args ...runtime.Value) runtime.Value {
 	usec := now.Nanosecond() / 1000
 	sec := now.Unix()
 	return runtime.NewString(fmt.Sprintf("0.%06d %d", usec, sec))
+}
+
+func builtinStrftime(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+
+	format := args[0].ToString()
+	var t time.Time
+
+	if len(args) >= 2 {
+		timestamp := args[1].ToInt()
+		t = time.Unix(timestamp, 0)
+	} else {
+		t = time.Now()
+	}
+
+	return runtime.NewString(formatStrftime(format, t))
+}
+
+func builtinGmstrftime(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+
+	format := args[0].ToString()
+	var t time.Time
+
+	if len(args) >= 2 {
+		timestamp := args[1].ToInt()
+		t = time.Unix(timestamp, 0).UTC()
+	} else {
+		t = time.Now().UTC()
+	}
+
+	return runtime.NewString(formatStrftime(format, t))
+}
+
+func formatStrftime(format string, t time.Time) string {
+	var result strings.Builder
+	i := 0
+	for i < len(format) {
+		if format[i] == '%' && i+1 < len(format) {
+			switch format[i+1] {
+			case 'a': // Abbreviated weekday name
+				result.WriteString(t.Weekday().String()[:3])
+			case 'A': // Full weekday name
+				result.WriteString(t.Weekday().String())
+			case 'b', 'h': // Abbreviated month name
+				result.WriteString(t.Month().String()[:3])
+			case 'B': // Full month name
+				result.WriteString(t.Month().String())
+			case 'C': // Century (year/100)
+				result.WriteString(fmt.Sprintf("%02d", t.Year()/100))
+			case 'd': // Day of month (01-31)
+				result.WriteString(fmt.Sprintf("%02d", t.Day()))
+			case 'e': // Day of month ( 1-31)
+				result.WriteString(fmt.Sprintf("%2d", t.Day()))
+			case 'H': // Hour 24-hour (00-23)
+				result.WriteString(fmt.Sprintf("%02d", t.Hour()))
+			case 'I': // Hour 12-hour (01-12)
+				h := t.Hour() % 12
+				if h == 0 {
+					h = 12
+				}
+				result.WriteString(fmt.Sprintf("%02d", h))
+			case 'j': // Day of year (001-366)
+				result.WriteString(fmt.Sprintf("%03d", t.YearDay()))
+			case 'm': // Month (01-12)
+				result.WriteString(fmt.Sprintf("%02d", t.Month()))
+			case 'M': // Minute (00-59)
+				result.WriteString(fmt.Sprintf("%02d", t.Minute()))
+			case 'p': // AM or PM
+				if t.Hour() < 12 {
+					result.WriteString("AM")
+				} else {
+					result.WriteString("PM")
+				}
+			case 'S': // Second (00-59)
+				result.WriteString(fmt.Sprintf("%02d", t.Second()))
+			case 'w': // Weekday (0-6, Sunday = 0)
+				result.WriteString(fmt.Sprintf("%d", t.Weekday()))
+			case 'y': // Year without century (00-99)
+				result.WriteString(fmt.Sprintf("%02d", t.Year()%100))
+			case 'Y': // Year with century
+				result.WriteString(fmt.Sprintf("%04d", t.Year()))
+			case 'Z': // Timezone name
+				result.WriteString(t.Location().String())
+			case 'z': // Timezone offset +hhmm
+				_, offset := t.Zone()
+				sign := "+"
+				if offset < 0 {
+					sign = "-"
+					offset = -offset
+				}
+				hours := offset / 3600
+				minutes := (offset % 3600) / 60
+				result.WriteString(fmt.Sprintf("%s%02d%02d", sign, hours, minutes))
+			case '%': // Literal %
+				result.WriteByte('%')
+			default:
+				// Unknown specifier, output as-is
+				result.WriteByte('%')
+				result.WriteByte(format[i+1])
+			}
+			i += 2
+		} else {
+			result.WriteByte(format[i])
+			i++
+		}
+	}
+	return result.String()
 }
 
 // ----------------------------------------------------------------------------
