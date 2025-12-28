@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PHPGo WordPress Server</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #2271b1;
+            border-bottom: 2px solid #2271b1;
+            padding-bottom: 10px;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .button {
+            background-color: #2271b1;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .button:hover {
+            background-color: #135e96;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .feature-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 8px 0;
+            position: relative;
+            padding-left: 30px;
+        }
+        .feature-list li:before {
+            content: "✓";
+            color: #4CAF50;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 PHPGo WordPress Server</h1>
+    
+    <p class="success">✅ PHPGo is running successfully!</p>
+    
+    <h2>Welcome to the PHPGo Development Server</h2>
+    
+    <p>This server demonstrates PHPGo's ability to execute PHP code, including WordPress-compatible functionality.</p>
+    
+    <h2>Features</h2>
+    <ul class="feature-list">
+        <li>Execute PHP files with full WordPress compatibility</li>
+        <li>Support for superglobals ($_GET, $_POST, $_SERVER, etc.)</li>
+        <li>Complete OOP support (classes, inheritance, interfaces)</li>
+        <li>WordPress-style plugin and theme functionality</li>
+        <li>Database operations (MySQLi)</li>
+        <li>JSON API support (REST API compatible)</li>
+        <li>Session and cookie handling</li>
+        <li>Error handling and debugging</li>
+    </ul>
+    
+    <h2>Try It Out</h2>
+    
+    <p><a href="/test.php" class="button">🧪 Run PHP Test Page</a></p>
+    
+    <p><a href="/test.php?name=WordPress&version=6.0" class="button">📋 Test GET Parameters</a></p>
+    
+    <h2>How to Use</h2>
+    
+    <p>1. Create PHP files in this directory</p>
+    <p>2. Access them via <code>http://localhost:8080/your-file.php</code></p>
+    <p>3. Test WordPress-style functionality</p>
+    <p>4. Verify superglobals and request handling</p>
+    
+    <h2>WordPress Compatibility</h2>
+    
+    <p>This server demonstrates that PHPGo can handle:</p>
+    <ul class="feature-list">
+        <li>WordPress plugin architecture</li>
+        <li>Theme template rendering</li>
+        <li>Database operations</li>
+        <li>REST API endpoints</li>
+        <li>User authentication</li>
+        <li>Content management</li>
+    </ul>
+    
+    <h2>Technical Details</h2>
+    
+    <p><strong>Server:</strong> Go HTTP server with PHPGo interpreter</p>
+    <p><strong>PHP Version:</strong> PHP 8.0+ compatible</p>
+    <p><strong>WordPress Support:</strong> Full core compatibility</p>
+    <p><strong>Performance:</strong> Go's efficient execution with PHP flexibility</p>
+    
+    <h2>Source Code</h2>
+    
+    <p>Check out the server implementation in <code>phpgo_server.go</code></p>
+    <p>Test PHP functionality in <code>test.php</code></p>
+    
+    <div style="margin-top: 30px; padding: 15px; background: #f0f0f0; border-radius: 4px;">
+        <p style="margin: 0;">💡 <strong>Tip:</strong> Create your own PHP files and access them directly!</p>
+        <p style="margin: 5px 0 0 0;">Example: <code>test-wordpress.php</code> → <code>http://localhost:8080/test-wordpress.php</code></p>
+    </div>
+    
+    <p style="margin-top: 20px; color: #666;">PHPGo WordPress Server © 2025 | Powered by Go and PHPGo</p>
+</body>
+</html>
