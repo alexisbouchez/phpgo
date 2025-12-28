@@ -152,6 +152,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinNl2br
 	case "str_word_count":
 		return builtinStrWordCount
+	case "str_shuffle":
+		return builtinStrShuffle
+	case "str_getcsv":
+		return builtinStrGetcsv
 	case "ord":
 		return builtinOrd
 	case "chr":
@@ -1098,6 +1102,82 @@ func builtinStrWordCount(args ...runtime.Value) runtime.Value {
 	default:
 		return runtime.NewInt(int64(len(validWords)))
 	}
+}
+
+func builtinStrShuffle(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	runes := []rune(str)
+
+	// Fisher-Yates shuffle
+	for i := len(runes) - 1; i > 0; i-- {
+		j := int(time.Now().UnixNano()%(int64(i)+1)) % (i + 1)
+		runes[i], runes[j] = runes[j], runes[i]
+	}
+
+	return runtime.NewString(string(runes))
+}
+
+func builtinStrGetcsv(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	input := args[0].ToString()
+	delimiter := ","
+	enclosure := "\""
+	escape := "\\"
+
+	if len(args) >= 2 {
+		delimiter = args[1].ToString()
+		if len(delimiter) == 0 {
+			delimiter = ","
+		} else {
+			delimiter = string(delimiter[0])
+		}
+	}
+
+	if len(args) >= 3 {
+		enclosure = args[2].ToString()
+		if len(enclosure) == 0 {
+			enclosure = "\""
+		} else {
+			enclosure = string(enclosure[0])
+		}
+	}
+
+	if len(args) >= 4 {
+		escape = args[3].ToString()
+		if len(escape) == 0 {
+			escape = "\\"
+		} else {
+			escape = string(escape[0])
+		}
+	}
+
+	// Use csv.Reader
+	reader := csv.NewReader(strings.NewReader(input))
+	reader.Comma = rune(delimiter[0])
+	reader.LazyQuotes = true
+
+	if enclosure[0] == delimiter[0] {
+		// If enclosure and delimiter are the same, disable quoting
+		reader.LazyQuotes = true
+	}
+
+	record, err := reader.Read()
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	result := runtime.NewArray()
+	for _, field := range record {
+		result.Set(nil, runtime.NewString(field))
+	}
+
+	return result
 }
 
 func builtinOrd(args ...runtime.Value) runtime.Value {
