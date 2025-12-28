@@ -482,6 +482,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinSimilarText
 	case "soundex":
 		return builtinSoundex
+	case "levenshtein":
+		return builtinLevenshtein
 
 	// Additional array functions
 	case "asort":
@@ -558,6 +560,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinCompact
 	case "extract":
 		return i.builtinExtract
+	case "get_defined_vars":
+		return i.builtinGetDefinedVars
 	case "array_pad":
 		return builtinArrayPad
 
@@ -4560,6 +4564,58 @@ func builtinSoundex(args ...runtime.Value) runtime.Value {
 	return runtime.NewString(result.String()[:4])
 }
 
+func builtinLevenshtein(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(-1)
+	}
+
+	str1 := args[0].ToString()
+	str2 := args[1].ToString()
+
+	// Levenshtein distance algorithm
+	len1, len2 := len(str1), len(str2)
+
+	// Create matrix
+	matrix := make([][]int, len1+1)
+	for i := range matrix {
+		matrix[i] = make([]int, len2+1)
+	}
+
+	// Initialize first row and column
+	for i := 0; i <= len1; i++ {
+		matrix[i][0] = i
+	}
+	for j := 0; j <= len2; j++ {
+		matrix[0][j] = j
+	}
+
+	// Fill matrix
+	for i := 1; i <= len1; i++ {
+		for j := 1; j <= len2; j++ {
+			cost := 0
+			if str1[i-1] != str2[j-1] {
+				cost = 1
+			}
+
+			delete := matrix[i-1][j] + 1
+			insert := matrix[i][j-1] + 1
+			substitute := matrix[i-1][j-1] + cost
+
+			min := delete
+			if insert < min {
+				min = insert
+			}
+			if substitute < min {
+				min = substitute
+			}
+
+			matrix[i][j] = min
+		}
+	}
+
+	return runtime.NewInt(int64(matrix[len1][len2]))
+}
+
 // ----------------------------------------------------------------------------
 // Additional array functions
 
@@ -5495,6 +5551,18 @@ func (i *Interpreter) builtinExtract(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.NewInt(count)
+}
+
+func (i *Interpreter) builtinGetDefinedVars(args ...runtime.Value) runtime.Value {
+	result := runtime.NewArray()
+
+	// Get all variables from the current environment
+	vars := i.env.GetAllVariables()
+	for name, value := range vars {
+		result.Set(runtime.NewString(name), value)
+	}
+
+	return result
 }
 
 func builtinArrayPad(args ...runtime.Value) runtime.Value {

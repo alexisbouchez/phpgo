@@ -71,6 +71,15 @@ func (e *Environment) SetRef(name string, ref *Value) {
 	e.store[name] = *ref
 }
 
+// GetAllVariables returns all variables in the current scope.
+func (e *Environment) GetAllVariables() map[string]Value {
+	result := make(map[string]Value)
+	for k, v := range e.store {
+		result[k] = v
+	}
+	return result
+}
+
 // Isset checks if a variable is set and not null.
 func (e *Environment) Isset(name string) bool {
 	val, ok := e.store[name]
