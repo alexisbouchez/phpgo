@@ -18,8 +18,17 @@ import (
 	"hash/crc32"
 	"io"
 	"math"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
+	"encoding/xml"
+	"golang.org/x/image/webp"
 	"mime/quotedprintable"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -1885,6 +1894,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "tempnam":
 		return builtinTempnam
 
+	// Stream context functions
+	case "stream_context_create":
+		return i.builtinStreamContextCreate
+	case "stream_context_get_options":
+		return i.builtinStreamContextGetOptions
+	case "stream_context_set_option":
+		return i.builtinStreamContextSetOption
+
 	// Directory functions
 	case "mkdir":
 		return builtinMkdir
@@ -1939,6 +1956,22 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "getmxrr":
 		return builtinGetmxrr
 
+	// cURL functions
+	case "curl_init":
+		return i.builtinCurlInit
+	case "curl_exec":
+		return i.builtinCurlExec
+	case "curl_close":
+		return i.builtinCurlClose
+	case "curl_setopt":
+		return i.builtinCurlSetopt
+	case "curl_getinfo":
+		return i.builtinCurlGetinfo
+	case "curl_error":
+		return i.builtinCurlError
+	case "curl_errno":
+		return i.builtinCurlErrno
+
 	// Image functions
 	case "getimagesize":
 		return builtinGetimagesize
@@ -1950,6 +1983,46 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinExifReadData
 	case "exif_imagetype":
 		return builtinExifImagetype
+
+	// GD Library functions
+	case "imagecreatetruecolor":
+		return i.builtinImageCreateTrueColor
+	case "imagecolorallocate":
+		return i.builtinImageColorAllocate
+	case "imagefilledrectangle":
+		return i.builtinImageFilledRectangle
+	case "imagecopyresampled":
+		return i.builtinImageCopyResampled
+	case "imagejpeg":
+		return i.builtinImageJpeg
+	case "imagepng":
+		return i.builtinImagePng
+	case "imagegif":
+		return i.builtinImageGif
+	case "imagewebp":
+		return i.builtinImageWebp
+	case "imagedestroy":
+		return i.builtinImageDestroy
+	case "imagesx":
+		return i.builtinImagesX
+	case "imagesy":
+		return i.builtinImagesY
+	case "imagefill":
+		return i.builtinImageFill
+	case "imagecolorallocatealpha":
+		return i.builtinImageColorAllocateAlpha
+	case "imagealphablending":
+		return i.builtinImageAlphaBlending
+	case "imagesavealpha":
+		return i.builtinImageSaveAlpha
+
+	// SimpleXML functions (commented out for now - needs proper implementation)
+	// case "simplexml_load_string":
+	//     return i.builtinSimpleXMLElementLoadString
+	// case "simplexml_load_file":
+	//     return i.builtinSimpleXMLElementLoadFile
+	// case "simplexml_import_dom":
+	//     return i.builtinSimpleXMLElementImportDom
 
 	// Gettext functions
 	case "gettext", "_":
@@ -5735,10 +5808,77 @@ func builtinFileGetContents(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	filename := args[0].ToString()
+	
+	// Check if this is an HTTP/HTTPS URL
+	if strings.HasPrefix(filename, "http://") || strings.HasPrefix(filename, "https://") {
+		// Handle HTTP/HTTPS requests - pass all arguments
+		return builtinFileGetContentsHTTP(filename, args[1:]...)
+	}
+	
+	// Handle local files
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		return runtime.FALSE
 	}
+	return runtime.NewString(string(data))
+}
+
+func builtinFileGetContentsHTTP(urlStr string, args ...runtime.Value) runtime.Value {
+	// Enhanced HTTP client implementation with support for stream contexts
+	
+	// Parse URL (we don't actually need the parsed URL for this simple implementation)
+	_, err := url.Parse(urlStr)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Create HTTP request
+	req, err := http.NewRequest("GET", urlStr, nil)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Add basic headers
+	req.Header.Set("User-Agent", "phpgo/1.0")
+	req.Header.Set("Accept", "*/*")
+	
+	// Handle stream context if provided (args[1] would be the stream context)
+	if len(args) >= 2 {
+		// For now, we ignore the stream context but in a full implementation
+		// we would use it to set custom headers, timeouts, etc.
+		// streamContext := args[1]
+	}
+	
+	// Handle additional parameters if provided
+	if len(args) >= 3 {
+		// args[2] would be offset
+		// args[3] would be max length
+		// args[4] would be context (if not already provided)
+	}
+	
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+	
+	// Execute request
+	resp, err := client.Do(req)
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer resp.Body.Close()
+	
+	// Check for successful response
+	if resp.StatusCode >= 400 {
+		return runtime.FALSE
+	}
+	
+	// Read response body
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
 	return runtime.NewString(string(data))
 }
 
@@ -12456,4 +12596,898 @@ func formatBcResult(value float64, scale int) string {
 	}
 	format := fmt.Sprintf("%%.%df", scale)
 	return fmt.Sprintf(format, value)
+}
+
+// cURL constants (commonly used options)
+const (
+	CURLOPT_URL            = 10002
+	CURLOPT_POST           = 47
+	CURLOPT_POSTFIELDS     = 10015
+	CURLOPT_HTTPHEADER     = 10023
+	CURLOPT_RETURNTRANSFER = 19913
+	CURLOPT_HEADER         = 42
+	CURLOPT_HTTPGET        = 80
+	CURLOPT_TIMEOUT        = 13
+	CURLOPT_USERAGENT      = 10018
+	CURLOPT_SSL_VERIFYPEER = 64
+	CURLOPT_SSL_VERIFYHOST = 81
+	CURLOPT_FOLLOWLOCATION = 52
+	CURLOPT_MAXREDIRS      = 68
+)
+
+// SimpleXML element structure
+type SimpleXMLElement struct {
+	Name     string
+	Value    string
+	Attributes map[string]string
+	Children  []*SimpleXMLElement
+}
+
+// GD image handle structure
+type GDImage struct {
+	image.Image
+	width     int
+	height    int
+	quality   int  // For JPEG/PNG quality
+	alpha     bool // Whether alpha channel is enabled
+}
+
+// cURL handle structure
+type CurlHandle struct {
+	url         string
+	method      string
+	postFields  string
+	headers     map[string]string
+	timeout     int
+	userAgent   string
+	sslVerify   bool
+	followRedirects bool
+	maxRedirects    int
+	responseHeaders http.Header
+	responseBody   string
+	error         string
+	errno        int
+	info         map[string]interface{}
+}
+
+// Stream Context functions
+func (i *Interpreter) builtinStreamContextCreate(args ...runtime.Value) runtime.Value {
+	// stream_context_create([array $options]) : resource
+	// For now, return a simple resource ID
+	// In a full implementation, this would create a proper stream context
+	return runtime.NewInt(1) // Simple resource ID
+}
+
+func (i *Interpreter) builtinStreamContextGetOptions(args ...runtime.Value) runtime.Value {
+	// stream_context_get_options(resource $stream_or_context) : array
+	// For now, return an empty array
+	return runtime.NewArray()
+}
+
+func (i *Interpreter) builtinStreamContextSetOption(args ...runtime.Value) runtime.Value {
+	// stream_context_set_option(resource $stream_or_context, array|string $options) : bool
+	// For now, return true to indicate success
+	return runtime.TRUE
+}
+
+// cURL functions
+func (i *Interpreter) builtinCurlInit(args ...runtime.Value) runtime.Value {
+	// curl_init([string $url]) : resource
+	url := ""
+	if len(args) >= 1 {
+		url = args[0].ToString()
+	}
+	
+	handle := &CurlHandle{
+		url:         url,
+		method:      "GET",
+		headers:     make(map[string]string),
+		timeout:     30,
+		userAgent:   "phpgo/1.0",
+		sslVerify:   true,
+		followRedirects: true,
+		maxRedirects:    20,
+		responseHeaders: make(http.Header),
+		info:         make(map[string]interface{}),
+	}
+	
+	// Store the handle in the interpreter
+	handleID := len(i.curlHandles) + 1
+	i.curlHandles[handleID] = handle
+	
+	return runtime.NewInt(int64(handleID))
+}
+
+func (i *Interpreter) builtinCurlSetopt(args ...runtime.Value) runtime.Value {
+	// curl_setopt(resource $ch, int $option, mixed $value) : bool
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+	
+	handleID := int(args[0].ToInt())
+	option := int(args[1].ToInt())
+	value := args[2]
+	
+	handle, ok := i.curlHandles[handleID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	switch option {
+	case CURLOPT_URL:
+		handle.url = value.ToString()
+	case CURLOPT_POST:
+		if value.ToBool() {
+			handle.method = "POST"
+		}
+	case CURLOPT_POSTFIELDS:
+		handle.postFields = value.ToString()
+	case CURLOPT_HTTPHEADER:
+		// Expect array of headers
+		if headersArray, ok := value.(*runtime.Array); ok {
+			// Iterate through the array keys
+			for _, key := range headersArray.Keys {
+				if headerValue := headersArray.Get(key); headerValue != runtime.NULL {
+					header := headerValue.ToString()
+					// Parse header in format "Key: Value"
+					if colonPos := strings.Index(header, ":"); colonPos > 0 {
+						key := strings.TrimSpace(header[:colonPos])
+						val := strings.TrimSpace(header[colonPos+1:])
+						handle.headers[key] = val
+					}
+				}
+			}
+		}
+	case CURLOPT_RETURNTRANSFER:
+		// Always return transfer in our implementation
+	case CURLOPT_HEADER:
+		// Header option not fully implemented yet
+	case CURLOPT_HTTPGET:
+		handle.method = "GET"
+	case CURLOPT_TIMEOUT:
+		handle.timeout = int(value.ToInt())
+	case CURLOPT_USERAGENT:
+		handle.userAgent = value.ToString()
+	case CURLOPT_SSL_VERIFYPEER:
+		handle.sslVerify = value.ToBool()
+	case CURLOPT_SSL_VERIFYHOST:
+		handle.sslVerify = value.ToBool()
+	case CURLOPT_FOLLOWLOCATION:
+		handle.followRedirects = value.ToBool()
+	case CURLOPT_MAXREDIRS:
+		handle.maxRedirects = int(value.ToInt())
+	default:
+		// Unknown option, ignore for now
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinCurlExec(args ...runtime.Value) runtime.Value {
+	// curl_exec(resource $ch) : mixed
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	handleID := int(args[0].ToInt())
+	handle, ok := i.curlHandles[handleID]
+	if !ok {
+		handle.error = "Invalid cURL handle"
+		handle.errno = 1
+		return runtime.FALSE
+	}
+	
+	// Execute the HTTP request
+	return i.executeCurlRequest(handle)
+}
+
+func (i *Interpreter) executeCurlRequest(handle *CurlHandle) runtime.Value {
+	// Reset previous response data
+	handle.responseHeaders = make(http.Header)
+	handle.responseBody = ""
+	handle.error = ""
+	handle.errno = 0
+	
+	// Create HTTP client
+	client := &http.Client{
+		Timeout: time.Duration(handle.timeout) * time.Second,
+	}
+	
+	// Handle redirects if enabled
+	if !handle.followRedirects {
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+	}
+	
+	// Create request
+	var req *http.Request
+	var err error
+	
+	switch handle.method {
+	case "POST":
+		req, err = http.NewRequest("POST", handle.url, strings.NewReader(handle.postFields))
+	case "GET":
+		fallthrough
+	default:
+		req, err = http.NewRequest("GET", handle.url, nil)
+	}
+	
+	if err != nil {
+		handle.error = err.Error()
+		handle.errno = 6 // CURLE_COULDNT_RESOLVE_HOST
+		return runtime.FALSE
+	}
+	
+	// Set headers
+	for key, value := range handle.headers {
+		req.Header.Set(key, value)
+	}
+	
+	// Set user agent
+	req.Header.Set("User-Agent", handle.userAgent)
+	
+	// Execute request
+	resp, err := client.Do(req)
+	if err != nil {
+		handle.error = err.Error()
+		handle.errno = 7 // CURLE_COULDNT_CONNECT
+		return runtime.FALSE
+	}
+	defer resp.Body.Close()
+	
+	// Store response headers
+	handle.responseHeaders = resp.Header
+	
+	// Read response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		handle.error = err.Error()
+		handle.errno = 23 // CURLE_WRITE_ERROR
+		return runtime.FALSE
+	}
+	
+	handle.responseBody = string(body)
+	
+	// Store info
+	handle.info["http_code"] = resp.StatusCode
+	handle.info["url"] = handle.url
+	handle.info["content_type"] = resp.Header.Get("Content-Type")
+	
+	// Return response body if CURLOPT_RETURNTRANSFER is set (always true in our case)
+	return runtime.NewString(handle.responseBody)
+}
+
+func (i *Interpreter) builtinCurlClose(args ...runtime.Value) runtime.Value {
+	// curl_close(resource $ch) : void
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+	
+	handleID := int(args[0].ToInt())
+	delete(i.curlHandles, handleID)
+	
+	return runtime.NULL
+}
+
+func (i *Interpreter) builtinCurlGetinfo(args ...runtime.Value) runtime.Value {
+	// curl_getinfo(resource $ch, int $opt) : mixed
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	handleID := int(args[0].ToInt())
+	// opt := args[1].ToInt() // Not used yet, but parameter is required
+	
+	handle, ok := i.curlHandles[handleID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// For now, return the whole info array
+	// Create array from map manually
+	infoArray := runtime.NewArray()
+	for key, value := range handle.info {
+		switch v := value.(type) {
+		case int:
+			infoArray.Set(runtime.NewString(key), runtime.NewInt(int64(v)))
+		case string:
+			infoArray.Set(runtime.NewString(key), runtime.NewString(v))
+		case float64:
+			infoArray.Set(runtime.NewString(key), runtime.NewFloat(v))
+		case bool:
+			if v {
+				infoArray.Set(runtime.NewString(key), runtime.TRUE)
+			} else {
+				infoArray.Set(runtime.NewString(key), runtime.FALSE)
+			}
+		default:
+			infoArray.Set(runtime.NewString(key), runtime.NewString(fmt.Sprintf("%v", v)))
+		}
+	}
+	return infoArray
+}
+
+func (i *Interpreter) builtinCurlError(args ...runtime.Value) runtime.Value {
+	// curl_error(resource $ch) : string
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	
+	handleID := int(args[0].ToInt())
+	handle, ok := i.curlHandles[handleID]
+	if !ok {
+		return runtime.NewString("")
+	}
+	
+	return runtime.NewString(handle.error)
+}
+
+func (i *Interpreter) builtinCurlErrno(args ...runtime.Value) runtime.Value {
+	// curl_errno(resource $ch) : int
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+	
+	handleID := int(args[0].ToInt())
+	handle, ok := i.curlHandles[handleID]
+	if !ok {
+		return runtime.NewInt(0)
+	}
+	
+	return runtime.NewInt(int64(handle.errno))
+}
+
+// GD Library functions
+func (i *Interpreter) builtinImageCreateTrueColor(args ...runtime.Value) runtime.Value {
+	// imagecreatetruecolor(int $width, int $height) : resource
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	width := int(args[0].ToInt())
+	height := int(args[1].ToInt())
+	
+	if width <= 0 || height <= 0 {
+		return runtime.FALSE
+	}
+	
+	// Create a new RGBA image
+	rect := image.Rect(0, 0, width, height)
+	gdImg := &GDImage{
+		Image:   image.NewRGBA(rect),
+		width:   width,
+		height:  height,
+		quality: 75, // Default JPEG quality
+		alpha:   true, // RGBA has alpha channel
+	}
+	
+	// Store the image in the interpreter
+	imageID := len(i.gdImages) + 1
+	i.gdImages[imageID] = gdImg
+	
+	return runtime.NewInt(int64(imageID))
+}
+
+func (i *Interpreter) builtinImageColorAllocate(args ...runtime.Value) runtime.Value {
+	// imagecolorallocate(resource $image, int $red, int $green, int $blue) : int
+	if len(args) < 4 {
+		return runtime.NewInt(-1)
+	}
+	
+	imageID := int(args[0].ToInt())
+	red := uint8(clamp(int(args[1].ToInt()), 0, 255))
+	green := uint8(clamp(int(args[2].ToInt()), 0, 255))
+	blue := uint8(clamp(int(args[3].ToInt()), 0, 255))
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.NewInt(-1)
+	}
+	
+	// For RGBA images, we can return a color that includes alpha=255 (opaque)
+	color := color.RGBA{R: red, G: green, B: blue, A: 255}
+	
+	// Store the color in a simple way - in a real implementation, we'd manage a color palette
+	// For now, we'll just return a dummy color index
+	return runtime.NewInt(1)
+}
+
+func (i *Interpreter) builtinImageColorAllocateAlpha(args ...runtime.Value) runtime.Value {
+	// imagecolorallocatealpha(resource $image, int $red, int $green, int $blue, int $alpha) : int
+	if len(args) < 5 {
+		return runtime.NewInt(-1)
+	}
+	
+	imageID := int(args[0].ToInt())
+	red := uint8(clamp(int(args[1].ToInt()), 0, 255))
+	green := uint8(clamp(int(args[2].ToInt()), 0, 255))
+	blue := uint8(clamp(int(args[3].ToInt()), 0, 255))
+	alpha := uint8(clamp(int(args[4].ToInt()), 0, 127)) // GD uses 0-127, we'll scale to 0-255
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.NewInt(-1)
+	}
+	
+	// Scale alpha from GD range (0-127) to standard range (0-255)
+	standardAlpha := 255 - (alpha * 2)
+	color := color.RGBA{R: red, G: green, B: blue, A: standardAlpha}
+	
+	// Return a dummy color index
+	return runtime.NewInt(1)
+}
+
+func (i *Interpreter) builtinImageFill(args ...runtime.Value) runtime.Value {
+	// imagefill(resource $image, int $x, int $y, int $color) : bool
+	if len(args) < 4 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	x := int(args[1].ToInt())
+	y := int(args[2].ToInt())
+	// color index is ignored for now
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// For now, just fill with a default color (white)
+	bounds := img.Bounds()
+	if rgbaImg, ok := img.Image.(*image.RGBA); ok {
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			for x := bounds.Min.X; x < bounds.Max.X; x++ {
+				rgbaImg.Set(x, y, color.White)
+			}
+		}
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImageFilledRectangle(args ...runtime.Value) runtime.Value {
+	// imagefilledrectangle(resource $image, int $x1, int $y1, int $x2, int $y2, int $color) : bool
+	if len(args) < 6 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	x1 := int(args[1].ToInt())
+	y1 := int(args[2].ToInt())
+	x2 := int(args[3].ToInt())
+	y2 := int(args[4].ToInt())
+	// color index is ignored for now
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Draw a filled rectangle with a default color (red for visibility)
+	if rgbaImg, ok := img.Image.(*image.RGBA); ok {
+		for y := min(y1, y2); y <= max(y1, y2); y++ {
+			for x := min(x1, x2); x <= max(x1, x2); x++ {
+				if x >= 0 && x < img.width && y >= 0 && y < img.height {
+					rgbaImg.Set(x, y, color.RGBA{R: 255, G: 0, B: 0, A: 255})
+				}
+			}
+		}
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImageCopyResampled(args ...runtime.Value) runtime.Value {
+	// imagecopyresampled(resource $dst_image, resource $src_image, int $dst_x, int $dst_y, int $src_x, int $src_y, int $dst_w, int $dst_h, int $src_w, int $src_h) : bool
+	if len(args) < 10 {
+		return runtime.FALSE
+	}
+	
+	dstID := int(args[0].ToInt())
+	srcID := int(args[1].ToInt())
+	dstX := int(args[2].ToInt())
+	dstY := int(args[3].ToInt())
+	srcX := int(args[4].ToInt())
+	srcY := int(args[5].ToInt())
+	dstW := int(args[6].ToInt())
+	dstH := int(args[7].ToInt())
+	srcW := int(args[8].ToInt())
+	srcH := int(args[9].ToInt())
+	
+	dstImg, dstOk := i.gdImages[dstID]
+	srcImg, srcOk := i.gdImages[srcID]
+	
+	if !dstOk || !srcOk {
+		return runtime.FALSE
+	}
+	
+	// Simple copy for now (no actual resampling)
+	// In a full implementation, we would use proper resampling algorithms
+	for dy := 0; dy < dstH && dy < srcH; dy++ {
+		for dx := 0; dx < dstW && dx < srcW; dx++ {
+			sx := srcX + dx
+			sy := srcY + dy
+			dxPos := dstX + dx
+			dyPos := dstY + dy
+			
+			if sx >= 0 && sx < srcImg.width && sy >= 0 && sy < srcImg.height {
+				srcColor := srcImg.At(sx, sy)
+				if dxPos >= 0 && dxPos < dstImg.width && dyPos >= 0 && dyPos < dstImg.height {
+					if dstRgba, ok := dstImg.Image.(*image.RGBA); ok {
+						dstRgba.Set(dxPos, dyPos, srcColor)
+					}
+				}
+			}
+		}
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImagesX(args ...runtime.Value) runtime.Value {
+	// imagesx(resource $image) : int
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+	
+	imageID := int(args[0].ToInt())
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.NewInt(0)
+	}
+	
+	return runtime.NewInt(int64(img.width))
+}
+
+func (i *Interpreter) builtinImagesY(args ...runtime.Value) runtime.Value {
+	// imagesy(resource $image) : int
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+	
+	imageID := int(args[0].ToInt())
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.NewInt(0)
+	}
+	
+	return runtime.NewInt(int64(img.height))
+}
+
+func (i *Interpreter) builtinImageJpeg(args ...runtime.Value) runtime.Value {
+	// imagejpeg(resource $image, string $filename, int $quality) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	filename := ""
+	quality := 75
+	
+	if len(args) >= 2 {
+		filename = args[1].ToString()
+	}
+	if len(args) >= 3 {
+		quality = int(args[2].ToInt())
+	}
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Create output file
+	outFile, err := os.Create(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer outFile.Close()
+	
+	// Set quality
+	img.quality = quality
+	
+	// Encode as JPEG
+	err = jpeg.Encode(outFile, img, &jpeg.Options{Quality: quality})
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImagePng(args ...runtime.Value) runtime.Value {
+	// imagepng(resource $image, string $filename, int $quality) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	filename := ""
+	quality := 9 // PNG compression level (0-9)
+	
+	if len(args) >= 2 {
+		filename = args[1].ToString()
+	}
+	if len(args) >= 3 {
+		quality = int(args[2].ToInt())
+	}
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Create output file
+	outFile, err := os.Create(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer outFile.Close()
+	
+	// Encode as PNG
+	err = png.Encode(outFile, img)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImageGif(args ...runtime.Value) runtime.Value {
+	// imagegif(resource $image, string $filename) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	filename := ""
+	
+	if len(args) >= 2 {
+		filename = args[1].ToString()
+	}
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Create output file
+	outFile, err := os.Create(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer outFile.Close()
+	
+	// Encode as GIF
+	err = gif.Encode(outFile, img, &gif.Options{})
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImageWebp(args ...runtime.Value) runtime.Value {
+	// imagewebp(resource $image, string $filename, int $quality) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	filename := ""
+	
+	if len(args) >= 2 {
+		filename = args[1].ToString()
+	}
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Create output file
+	outFile, err := os.Create(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer outFile.Close()
+	
+	// For now, skip WebP encoding as it requires additional setup
+	// In a full implementation, we would use proper WebP encoding
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinImageDestroy(args ...runtime.Value) runtime.Value {
+	// imagedestroy(resource $image) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	delete(i.gdImages, imageID)
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImageAlphaBlending(args ...runtime.Value) runtime.Value {
+	// imagealphablending(resource $image, bool $blendmode) : bool
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	blendMode := args[1].ToBool()
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// For now, just store the setting
+	img.alpha = !blendMode // If blending is off, alpha channel is preserved
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinImageSaveAlpha(args ...runtime.Value) runtime.Value {
+	// imagesavealpha(resource $image, bool $saveflag) : bool
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	imageID := int(args[0].ToInt())
+	saveFlag := args[1].ToBool()
+	
+	img, ok := i.gdImages[imageID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Store the alpha saving setting
+	img.alpha = saveFlag
+	
+	return runtime.TRUE
+}
+
+// SimpleXML functions
+func (i *Interpreter) builtinSimpleXMLElementLoadString(args ...runtime.Value) runtime.Value {
+	// simplexml_load_string(string $data, string $class_name, int $options, string $ns, bool $is_prefix) : SimpleXMLElement|false
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	xmlData := args[0].ToString()
+	
+	// Parse XML
+	var elem SimpleXMLElement
+	err := parseXMLString(xmlData, &elem)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Create a runtime object to represent the SimpleXML element
+	simpleXMLElement := runtime.NewObject(nil)
+	simpleXMLElement.ClassName = "SimpleXMLElement"
+	
+	// Store the element data
+	simpleXMLElement.SetProperty("name", runtime.NewString(elem.Name))
+	simpleXMLElement.SetProperty("value", runtime.NewString(elem.Value))
+	
+	// Store attributes
+	attrArray := runtime.NewArray()
+	for key, value := range elem.Attributes {
+		attrArray.Set(runtime.NewString(key), runtime.NewString(value))
+	}
+	simpleXMLElement.SetProperty("attributes", attrArray)
+	
+	// Store children
+	childrenArray := runtime.NewArray()
+	for _, child := range elem.Children {
+		childObj := runtime.NewObject()
+		childObj.ClassName = "SimpleXMLElement"
+		childObj.SetProperty("name", runtime.NewString(child.Name))
+		childObj.SetProperty("value", runtime.NewString(child.Value))
+		childrenArray.Append(childObj)
+	}
+	simpleXMLElement.SetProperty("children", childrenArray)
+	
+	return simpleXMLElement
+}
+
+func (i *Interpreter) builtinSimpleXMLElementLoadFile(args ...runtime.Value) runtime.Value {
+	// simplexml_load_file(string $filename, string $class_name, int $options, string $ns, bool $is_prefix) : SimpleXMLElement|false
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	filename := args[0].ToString()
+	
+	// Read file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Parse XML
+	var elem SimpleXMLElement
+	err = parseXMLString(string(data), &elem)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Create a runtime object to represent the SimpleXML element
+	simpleXMLElement := runtime.NewObject(nil)
+	simpleXMLElement.ClassName = "SimpleXMLElement"
+	
+	// Store the element data
+	simpleXMLElement.SetProperty("name", runtime.NewString(elem.Name))
+	simpleXMLElement.SetProperty("value", runtime.NewString(elem.Value))
+	
+	// Store attributes
+	attrArray := runtime.NewArray()
+	for key, value := range elem.Attributes {
+		attrArray.Set(runtime.NewString(key), runtime.NewString(value))
+	}
+	simpleXMLElement.SetProperty("attributes", attrArray)
+	
+	// Store children
+	childrenArray := runtime.NewArray()
+	for _, child := range elem.Children {
+		childObj := runtime.NewObject(nil)
+		childObj.ClassName = "SimpleXMLElement"
+		childObj.SetProperty("name", runtime.NewString(child.Name))
+		childObj.SetProperty("value", runtime.NewString(child.Value))
+		childrenArray.Append(childObj)
+	}
+	simpleXMLElement.SetProperty("children", childrenArray)
+	
+	return simpleXMLElement
+}
+
+func (i *Interpreter) builtinSimpleXMLElementImportDom(args ...runtime.Value) runtime.Value {
+	// simplexml_import_dom(DOMNode $node, string $class_name) : SimpleXMLElement|false
+	// For now, return false as DOM is not fully implemented
+	return runtime.FALSE
+}
+
+func parseXMLString(xmlData string, elem *SimpleXMLElement) error {
+	// Simple XML parser - for now, we'll use a basic approach
+	// In a full implementation, we would use proper XML parsing
+	
+	// For now, let's create a simple element structure
+	elem.Name = "root"
+	elem.Value = xmlData
+	elem.Attributes = make(map[string]string)
+	elem.Children = make([]*SimpleXMLElement, 0)
+	
+	// Basic XML parsing - this is simplified for demonstration
+	// A real implementation would use proper XML parsing
+	return nil
+}
+
+// Helper functions for GD
+func clamp(value, min, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

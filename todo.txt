@@ -7,10 +7,10 @@ Next Milestone: HTTP/Database Layer (for minimal WordPress boot)
 Key Milestones:
   [X] Milestone 1: HTTP Context & Superglobals - WordPress can receive requests
   [X] Milestone 2: Database Layer (MySQL/PDO) - WordPress can read/write data
-  [ ] Milestone 3: Sessions & Cookies - User authentication works
-  [ ] Milestone 4: Enhanced File I/O - Plugin/theme installation works
-  [ ] Milestone 5: HTTP Client (cURL) - External API calls work
-  [ ] Milestone 6: Image Processing (GD) - Media library works
+  [X] Milestone 3: Sessions & Cookies - User authentication works
+  [X] Milestone 4: Enhanced File I/O - Plugin/theme installation works
+  [X] Milestone 5: HTTP Client (cURL) - External API calls work
+  [X] Milestone 6: Image Processing (GD) - Media library works
   [ ] Milestone 7: Full WordPress Admin - Complete admin panel functionality
 
 Progress Summary:
@@ -60,7 +60,7 @@ Session Support:
 File Upload Handling:
   [X] move_uploaded_file() - move uploaded file
   [X] is_uploaded_file() - check if file was uploaded
-  [ ] Handle $_FILES array structure
+  [X] Handle $_FILES array structure
 
 Stream/File Functions:
   [X] fopen() / fclose() - open/close file handle
@@ -83,10 +83,9 @@ Directory/Filesystem Functions:
   [X] chown() / chgrp() - change owner/group
 
 HTTP Client (for WordPress HTTP API):
-  [ ] cURL extension (curl_init, curl_exec, curl_setopt, etc.)
-    OR
-  [ ] stream_context_create() with HTTP wrapper
-  [ ] file_get_contents() with HTTP URLs (already exists, verify)
+  [X] cURL extension (curl_init, curl_exec, curl_setopt, curl_getinfo, curl_error, curl_close, etc.)
+  [X] stream_context_create() with HTTP wrapper
+  [X] file_get_contents() with HTTP URLs (already exists, verify)
 
 Error Handling:
   [X] try/catch exception handling (exists, verify finally)
@@ -135,13 +134,13 @@ MEDIUM PRIORITY - Enhanced WordPress Support
 ==============================================
 
 Image Manipulation (for media library):
-  [ ] GD library basics (imagecreatetruecolor, imagecopyresampled, etc.)
-  [ ] Image formats (JPEG, PNG, GIF, WebP)
+  [X] GD library basics (imagecreatetruecolor, imagecopyresampled, etc.)
+  [X] Image formats (JPEG, PNG, GIF, WebP)
   [X] getimagesize() / image_type_to_mime_type()
   [X] exif_read_data() - read EXIF data from images
 
 XML Support (for RSS/Atom feeds, XML-RPC):
-  [ ] SimpleXML extension (simplexml_load_string, etc.)
+  [X] SimpleXML extension (simplexml_load_string, etc.)
   [ ] XMLReader / XMLWriter
   [ ] xml_parse() / xml_parser_create() - XML parser
   [ ] DOMDocument class

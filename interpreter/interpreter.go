@@ -37,6 +37,8 @@ type Interpreter struct {
 	httpContext       *HTTPContext        // HTTP request context
 	errorHandlers     []runtime.Value     // Stack of error handlers
 	exceptionHandlers []runtime.Value     // Stack of exception handlers
+	curlHandles       map[int]*CurlHandle // Active cURL handles
+	gdImages          map[int]*GDImage    // Active GD images
 }
 
 // HTTPContext represents HTTP request information
@@ -73,6 +75,8 @@ func New() *Interpreter {
 		resources:      make(map[int64]*runtime.Resource),
 		nextResourceID: 1,
 		autoloadFuncs:  make([]runtime.Value, 0),
+		curlHandles:    make(map[int]*CurlHandle),
+		gdImages:      make(map[int]*GDImage),
 		iniSettings:    make(map[string]string),
 		httpContext: &HTTPContext{
 			Headers:         make(map[string]string),
@@ -117,6 +121,32 @@ func (i *Interpreter) SetHTTPContext(method, uri, queryString string, headers, c
 	i.httpContext.Cookies = cookies
 	i.httpContext.PostData = postData
 	i.httpContext.Files = files
+	
+	// Process uploaded files and create temporary files
+	if len(files) > 0 {
+		// Create temp directory if it doesn't exist
+		tempDir := "/tmp"
+		if _, err := os.Stat(tempDir); os.IsNotExist(err) {
+			os.MkdirAll(tempDir, 0755)
+		}
+		
+		// Create temporary files for each uploaded file
+		for filename, content := range files {
+			// Create a unique temporary filename
+			tempFilePath := filepath.Join(tempDir, "phpgo_"+filename)
+			
+			// Write the file content to the temporary file
+			if err := os.WriteFile(tempFilePath, content, 0644); err == nil {
+				// Track this as an uploaded file
+				i.httpContext.UploadedFiles[tempFilePath] = true
+				// Update the files map to store the temp file path instead of content
+				files[filename] = []byte(tempFilePath)
+			} else {
+				// If we can't write the file, remove it from the map
+				delete(files, filename)
+			}
+		}
+	}
 	
 	// Set common server variables
 	i.httpContext.ServerVars["REQUEST_METHOD"] = method
@@ -234,13 +264,23 @@ func (i *Interpreter) populateSuperglobals() {
 	// Populate $_FILES
 	if len(i.httpContext.Files) > 0 {
 		files := i.env.Global().GetArray("_FILES")
-		for filename, content := range i.httpContext.Files {
+		for filename, fileData := range i.httpContext.Files {
+			// fileData now contains the temp file path as []byte
+			tempFilePath := string(fileData)
+			
+			// Get file info from the actual file
+			fileInfoStat, err := os.Stat(tempFilePath)
+			if err != nil {
+				// If file doesn't exist, skip it
+				continue
+			}
+			
 			fileInfo := runtime.NewArray()
 			fileInfo.Set(runtime.NewString("name"), runtime.NewString(filename))
 			fileInfo.Set(runtime.NewString("type"), runtime.NewString("application/octet-stream"))
-			fileInfo.Set(runtime.NewString("tmp_name"), runtime.NewString("/tmp/" + filename))
+			fileInfo.Set(runtime.NewString("tmp_name"), runtime.NewString(tempFilePath))
 			fileInfo.Set(runtime.NewString("error"), runtime.NewInt(0))
-			fileInfo.Set(runtime.NewString("size"), runtime.NewInt(int64(len(content))))
+			fileInfo.Set(runtime.NewString("size"), runtime.NewInt(fileInfoStat.Size()))
 			files.Set(runtime.NewString(filename), fileInfo)
 		}
 	}
