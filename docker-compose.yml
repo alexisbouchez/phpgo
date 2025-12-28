@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  wordpress:
+    build:
+      context: .
+      dockerfile: Dockerfile.wordpress
+    ports:
+      - "8080:80"
+    volumes:
+      - wordpress_data:/var/www/html
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    depends_on:
+      - db
+    networks:
+      - wordpress-network
+
+  db:
+    image: mysql:5.7
+    environment:
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - wordpress-network
+
+  phpgo-tester:
+    build:
+      context: .
+      dockerfile: Dockerfile.phpgo
+    volumes:
+      - .:/app
+      - wordpress_data:/var/www/html
+    working_dir: /app
+    networks:
+      - wordpress-network
+
+volumes:
+  wordpress_data:
+  db_data:
+
+networks:
+  wordpress-network:
+    driver: bridge

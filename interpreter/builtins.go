@@ -20,12 +20,12 @@ import (
 	"math"
 	"image"
 	"image/color"
-	"image/draw"
+	// "image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
-	"encoding/xml"
-	"golang.org/x/image/webp"
+	// "encoding/xml"
+	// "golang.org/x/image/webp"
 	"mime/quotedprintable"
 	"net"
 	"net/http"
@@ -13038,10 +13038,11 @@ func (i *Interpreter) builtinImageColorAllocate(args ...runtime.Value) runtime.V
 	}
 	
 	// For RGBA images, we can return a color that includes alpha=255 (opaque)
-	color := color.RGBA{R: red, G: green, B: blue, A: 255}
+	_ = color.RGBA{R: red, G: green, B: blue, A: 255}
 	
 	// Store the color in a simple way - in a real implementation, we'd manage a color palette
 	// For now, we'll just return a dummy color index
+	_ = img // Use img to avoid unused variable error
 	return runtime.NewInt(1)
 }
 
@@ -13064,9 +13065,10 @@ func (i *Interpreter) builtinImageColorAllocateAlpha(args ...runtime.Value) runt
 	
 	// Scale alpha from GD range (0-127) to standard range (0-255)
 	standardAlpha := 255 - (alpha * 2)
-	color := color.RGBA{R: red, G: green, B: blue, A: standardAlpha}
+	_ = color.RGBA{R: red, G: green, B: blue, A: standardAlpha}
 	
 	// Return a dummy color index
+	_ = img // Use img to avoid unused variable error
 	return runtime.NewInt(1)
 }
 
@@ -13077,8 +13079,8 @@ func (i *Interpreter) builtinImageFill(args ...runtime.Value) runtime.Value {
 	}
 	
 	imageID := int(args[0].ToInt())
-	x := int(args[1].ToInt())
-	y := int(args[2].ToInt())
+	_ = int(args[1].ToInt()) // x - unused for now
+	_ = int(args[2].ToInt()) // y - unused for now
 	// color index is ignored for now
 	
 	img, ok := i.gdImages[imageID]
@@ -13221,9 +13223,7 @@ func (i *Interpreter) builtinImageJpeg(args ...runtime.Value) runtime.Value {
 	if len(args) >= 2 {
 		filename = args[1].ToString()
 	}
-	if len(args) >= 3 {
-		quality = int(args[2].ToInt())
-	}
+	// quality parameter is ignored for PNG
 	
 	img, ok := i.gdImages[imageID]
 	if !ok {
@@ -13232,6 +13232,7 @@ func (i *Interpreter) builtinImageJpeg(args ...runtime.Value) runtime.Value {
 	
 	// Create output file
 	outFile, err := os.Create(filename)
+	_ = img // Use img to avoid unused variable error
 	if err != nil {
 		return runtime.FALSE
 	}
@@ -13257,14 +13258,12 @@ func (i *Interpreter) builtinImagePng(args ...runtime.Value) runtime.Value {
 	
 	imageID := int(args[0].ToInt())
 	filename := ""
-	quality := 9 // PNG compression level (0-9)
+	// quality parameter is ignored for PNG
 	
 	if len(args) >= 2 {
 		filename = args[1].ToString()
 	}
-	if len(args) >= 3 {
-		quality = int(args[2].ToInt())
-	}
+	// quality parameter is ignored for PNG
 	
 	img, ok := i.gdImages[imageID]
 	if !ok {
@@ -13276,6 +13275,7 @@ func (i *Interpreter) builtinImagePng(args ...runtime.Value) runtime.Value {
 	if err != nil {
 		return runtime.FALSE
 	}
+	_ = img // Use img to avoid unused variable error
 	defer outFile.Close()
 	
 	// Encode as PNG
@@ -13311,6 +13311,7 @@ func (i *Interpreter) builtinImageGif(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	defer outFile.Close()
+	_ = img // Use img to avoid unused variable error
 	
 	// Encode as GIF
 	err = gif.Encode(outFile, img, &gif.Options{})
@@ -13345,6 +13346,7 @@ func (i *Interpreter) builtinImageWebp(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	defer outFile.Close()
+	_ = img // Use img to avoid unused variable error
 	
 	// For now, skip WebP encoding as it requires additional setup
 	// In a full implementation, we would use proper WebP encoding
@@ -13421,7 +13423,11 @@ func (i *Interpreter) builtinSimpleXMLElementLoadString(args ...runtime.Value) r
 	
 	// Create a runtime object to represent the SimpleXML element
 	simpleXMLElement := runtime.NewObject(nil)
-	simpleXMLElement.ClassName = "SimpleXMLElement"
+	if simpleXMLElement.Class == nil {
+		simpleXMLElement.Class = &runtime.Class{Name: "SimpleXMLElement"}
+	} else {
+		simpleXMLElement.Class.Name = "SimpleXMLElement"
+	}
 	
 	// Store the element data
 	simpleXMLElement.SetProperty("name", runtime.NewString(elem.Name))
@@ -13437,11 +13443,15 @@ func (i *Interpreter) builtinSimpleXMLElementLoadString(args ...runtime.Value) r
 	// Store children
 	childrenArray := runtime.NewArray()
 	for _, child := range elem.Children {
-		childObj := runtime.NewObject()
-		childObj.ClassName = "SimpleXMLElement"
+		childObj := runtime.NewObject(nil)
+		if childObj.Class == nil {
+			childObj.Class = &runtime.Class{Name: "SimpleXMLElement"}
+		} else {
+			childObj.Class.Name = "SimpleXMLElement"
+		}
 		childObj.SetProperty("name", runtime.NewString(child.Name))
 		childObj.SetProperty("value", runtime.NewString(child.Value))
-		childrenArray.Append(childObj)
+		childrenArray.Set(runtime.NewInt(int64(len(childrenArray.Keys))), childObj)
 	}
 	simpleXMLElement.SetProperty("children", childrenArray)
 	
@@ -13471,7 +13481,11 @@ func (i *Interpreter) builtinSimpleXMLElementLoadFile(args ...runtime.Value) run
 	
 	// Create a runtime object to represent the SimpleXML element
 	simpleXMLElement := runtime.NewObject(nil)
-	simpleXMLElement.ClassName = "SimpleXMLElement"
+	if simpleXMLElement.Class == nil {
+		simpleXMLElement.Class = &runtime.Class{Name: "SimpleXMLElement"}
+	} else {
+		simpleXMLElement.Class.Name = "SimpleXMLElement"
+	}
 	
 	// Store the element data
 	simpleXMLElement.SetProperty("name", runtime.NewString(elem.Name))
@@ -13488,10 +13502,14 @@ func (i *Interpreter) builtinSimpleXMLElementLoadFile(args ...runtime.Value) run
 	childrenArray := runtime.NewArray()
 	for _, child := range elem.Children {
 		childObj := runtime.NewObject(nil)
-		childObj.ClassName = "SimpleXMLElement"
+		if childObj.Class == nil {
+			childObj.Class = &runtime.Class{Name: "SimpleXMLElement"}
+		} else {
+			childObj.Class.Name = "SimpleXMLElement"
+		}
 		childObj.SetProperty("name", runtime.NewString(child.Name))
 		childObj.SetProperty("value", runtime.NewString(child.Value))
-		childrenArray.Append(childObj)
+		childrenArray.Set(runtime.NewInt(int64(len(childrenArray.Keys))), childObj)
 	}
 	simpleXMLElement.SetProperty("children", childrenArray)
 	
@@ -13738,10 +13756,7 @@ func (i *Interpreter) builtinDOMDocumentSaveXML(args ...runtime.Value) runtime.V
 // SAX parsing functions
 func (i *Interpreter) builtinXMLParserCreate(args ...runtime.Value) runtime.Value {
 	// xml_parser_create(string $encoding) : resource
-	encoding := "UTF-8"
-	if len(args) >= 1 {
-		encoding = args[0].ToString()
-	}
+	// encoding parameter is ignored for now
 	
 	parser := &XMLParser{
 		elementHandler:        runtime.NULL,
@@ -13764,13 +13779,9 @@ func (i *Interpreter) builtinXMLParse(args ...runtime.Value) runtime.Value {
 	}
 	
 	parserID := int(args[0].ToInt())
-	xmlData := args[1].ToString()
-	isFinal := false
-	if len(args) >= 3 {
-		isFinal = args[2].ToBool()
-	}
+	// xmlData and isFinal parameters are ignored for now
 	
-	parser, ok := i.xmlParsers[parserID]
+	_, ok := i.xmlParsers[parserID]
 	if !ok {
 		return runtime.NewInt(0)
 	}
@@ -13802,7 +13813,7 @@ func (i *Interpreter) builtinXMLSetElementHandler(args ...runtime.Value) runtime
 	
 	parserID := int(args[0].ToInt())
 	startHandler := args[1]
-	endHandler := args[2]
+	// endHandler := args[2] // Not used in this simplified implementation
 	
 	parser, ok := i.xmlParsers[parserID]
 	if !ok {
@@ -13835,21 +13846,7 @@ func (i *Interpreter) builtinXMLSetCharacterDataHandler(args ...runtime.Value) r
 	return runtime.TRUE
 }
 
-// Enhanced XML parsing function
-func parseXMLString(xmlData string, elem *SimpleXMLElement) error {
-	// Simple XML parser - for now, we'll use a basic approach
-	// In a full implementation, we would use proper XML parsing
-	
-	// For now, let's create a simple element structure
-	elem.Name = "root"
-	elem.Value = xmlData
-	elem.Attributes = make(map[string]string)
-	elem.Children = make([]*SimpleXMLElement, 0)
-	
-	// Basic XML parsing - this is simplified for demonstration
-	// A real implementation would use proper XML parsing
-	return nil
-}
+
 
 // Helper functions for GD
 func clamp(value, min, max int) int {

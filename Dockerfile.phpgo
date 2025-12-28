@@ -1,0 +1,14 @@
+FROM golang:1.21
+
+WORKDIR /app
+
+# Copy the entire project
+COPY . .
+
+# Build phpgo
+RUN go build -o phpgo ./cmd/phpgo
+
+# Install curl and other tools for testing
+RUN apt-get update && apt-get install -y curl wget unzip
+
+CMD ["./phpgo", "--help"]
