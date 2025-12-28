@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -417,6 +418,22 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinLog
 	case "exp":
 		return builtinExp
+
+	// URL functions
+	case "parse_url":
+		return builtinParseUrl
+	case "http_build_query":
+		return builtinHttpBuildQuery
+	case "urlencode":
+		return builtinUrlencode
+	case "urldecode":
+		return builtinUrldecode
+	case "rawurlencode":
+		return builtinRawurlencode
+	case "rawurldecode":
+		return builtinRawurldecode
+	case "parse_str":
+		return i.builtinParseStr
 
 	default:
 		return nil
@@ -3484,4 +3501,202 @@ func builtinExp(args ...runtime.Value) runtime.Value {
 		return runtime.NewFloat(0)
 	}
 	return runtime.NewFloat(math.Exp(args[0].ToFloat()))
+}
+
+// ----------------------------------------------------------------------------
+// URL functions
+
+func builtinParseUrl(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	urlStr := args[0].ToString()
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// If component is specified, return only that component
+	if len(args) >= 2 {
+		component := int(args[1].ToInt())
+		switch component {
+		case -1: // PHP_URL_SCHEME
+			if u.Scheme != "" {
+				return runtime.NewString(u.Scheme)
+			}
+			return runtime.NULL
+		case 1: // PHP_URL_HOST
+			if u.Host != "" {
+				// Remove port if present
+				host := u.Host
+				if strings.Contains(host, ":") {
+					host = strings.Split(host, ":")[0]
+				}
+				return runtime.NewString(host)
+			}
+			return runtime.NULL
+		case 2: // PHP_URL_PORT
+			if u.Port() != "" {
+				port, _ := strconv.ParseInt(u.Port(), 10, 64)
+				return runtime.NewInt(port)
+			}
+			return runtime.NULL
+		case 3: // PHP_URL_USER
+			if u.User != nil {
+				return runtime.NewString(u.User.Username())
+			}
+			return runtime.NULL
+		case 4: // PHP_URL_PASS
+			if u.User != nil {
+				if pass, ok := u.User.Password(); ok {
+					return runtime.NewString(pass)
+				}
+			}
+			return runtime.NULL
+		case 5: // PHP_URL_PATH
+			if u.Path != "" {
+				return runtime.NewString(u.Path)
+			}
+			return runtime.NULL
+		case 6: // PHP_URL_QUERY
+			if u.RawQuery != "" {
+				return runtime.NewString(u.RawQuery)
+			}
+			return runtime.NULL
+		case 7: // PHP_URL_FRAGMENT
+			if u.Fragment != "" {
+				return runtime.NewString(u.Fragment)
+			}
+			return runtime.NULL
+		}
+		return runtime.NULL
+	}
+
+	// Return associative array with all components
+	result := runtime.NewArray()
+
+	if u.Scheme != "" {
+		result.Set(runtime.NewString("scheme"), runtime.NewString(u.Scheme))
+	}
+	if u.Host != "" {
+		// Remove port if present
+		host := u.Host
+		if strings.Contains(host, ":") {
+			host = strings.Split(host, ":")[0]
+		}
+		result.Set(runtime.NewString("host"), runtime.NewString(host))
+	}
+	if u.Port() != "" {
+		port, _ := strconv.ParseInt(u.Port(), 10, 64)
+		result.Set(runtime.NewString("port"), runtime.NewInt(port))
+	}
+	if u.User != nil {
+		result.Set(runtime.NewString("user"), runtime.NewString(u.User.Username()))
+		if pass, ok := u.User.Password(); ok {
+			result.Set(runtime.NewString("pass"), runtime.NewString(pass))
+		}
+	}
+	if u.Path != "" {
+		result.Set(runtime.NewString("path"), runtime.NewString(u.Path))
+	}
+	if u.RawQuery != "" {
+		result.Set(runtime.NewString("query"), runtime.NewString(u.RawQuery))
+	}
+	if u.Fragment != "" {
+		result.Set(runtime.NewString("fragment"), runtime.NewString(u.Fragment))
+	}
+
+	return result
+}
+
+func builtinHttpBuildQuery(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewString("")
+	}
+
+	var parts []string
+	for _, key := range arr.Keys {
+		val := arr.Elements[key]
+		keyStr := key.ToString()
+		valStr := val.ToString()
+		parts = append(parts, url.QueryEscape(keyStr)+"="+url.QueryEscape(valStr))
+	}
+
+	return runtime.NewString(strings.Join(parts, "&"))
+}
+
+func builtinUrlencode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	// PHP's urlencode uses + for spaces
+	encoded := url.QueryEscape(args[0].ToString())
+	return runtime.NewString(encoded)
+}
+
+func builtinUrldecode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	decoded, err := url.QueryUnescape(args[0].ToString())
+	if err != nil {
+		return runtime.NewString(args[0].ToString())
+	}
+	return runtime.NewString(decoded)
+}
+
+func builtinRawurlencode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	// PHP's rawurlencode uses %20 for spaces (RFC 3986)
+	encoded := url.PathEscape(args[0].ToString())
+	return runtime.NewString(encoded)
+}
+
+func builtinRawurldecode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	decoded, err := url.PathUnescape(args[0].ToString())
+	if err != nil {
+		return runtime.NewString(args[0].ToString())
+	}
+	return runtime.NewString(decoded)
+}
+
+func (i *Interpreter) builtinParseStr(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	queryStr := args[0].ToString()
+	values, err := url.ParseQuery(queryStr)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	result := runtime.NewArray()
+	for key, vals := range values {
+		if len(vals) == 1 {
+			result.Set(runtime.NewString(key), runtime.NewString(vals[0]))
+		} else {
+			// Multiple values - create array
+			valsArray := runtime.NewArray()
+			for _, v := range vals {
+				valsArray.Set(nil, runtime.NewString(v))
+			}
+			result.Set(runtime.NewString(key), valsArray)
+		}
+	}
+
+	// If second argument provided, assign to that variable (needs env access)
+	// For now, just return the array
+	return result
 }

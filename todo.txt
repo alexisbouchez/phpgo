@@ -1,5 +1,289 @@
-HIGH PRIORITY
+WORDPRESS FEATURE PARITY ROADMAP
+==============================================
 
-MEDIUM PRIORITY
+Current Status: Foundation Complete (OOP, Attributes, Reflection, Generators)
+Next Milestone: HTTP/Database Layer (for minimal WordPress boot)
 
-LOWER PRIORITY
+Key Milestones:
+  [ ] Milestone 1: HTTP Context & Superglobals - WordPress can receive requests
+  [ ] Milestone 2: Database Layer (MySQL/PDO) - WordPress can read/write data
+  [ ] Milestone 3: Sessions & Cookies - User authentication works
+  [ ] Milestone 4: Enhanced File I/O - Plugin/theme installation works
+  [ ] Milestone 5: HTTP Client (cURL) - External API calls work
+  [ ] Milestone 6: Image Processing (GD) - Media library works
+  [ ] Milestone 7: Full WordPress Admin - Complete admin panel functionality
+
+Progress Summary:
+  Language Features: ~85% (classes, traits, attributes, generators, namespaces ✓)
+  Built-in Functions: ~40% (100+ functions exist, need ~150 more for WP)
+  Extensions: ~5% (need database, HTTP, sessions, images)
+  Web Context: ~0% (need superglobals, headers, cookies)
+
+==============================================
+HIGH PRIORITY - WordPress Core Requirements
+==============================================
+
+Database Support:
+  [ ] MySQL/MySQLi extension (mysql_connect, mysql_query, etc.)
+  [ ] PDO (PHP Data Objects) with MySQL driver
+  [ ] Prepared statements and parameter binding
+  [ ] Transaction support (BEGIN, COMMIT, ROLLBACK)
+  [ ] mysql_real_escape_string / mysqli_real_escape_string
+
+Superglobals (proper population and HTTP context):
+  [ ] $_GET - query string parameters
+  [ ] $_POST - POST request body
+  [ ] $_SERVER - server and request information
+  [ ] $_COOKIE - HTTP cookies
+  [ ] $_SESSION - session data
+  [ ] $_FILES - uploaded files
+  [ ] $_REQUEST - combined GET/POST/COOKIE
+  [ ] $_ENV - environment variables
+
+HTTP Functions:
+  [ ] header() - send HTTP headers
+  [ ] headers_sent() - check if headers already sent
+  [ ] setcookie() / setrawcookie() - set HTTP cookies
+  [ ] http_response_code() - get/set HTTP response code
+  [ ] header_remove() - remove previously set headers
+  [ ] headers_list() - list sent headers
+
+Session Support:
+  [ ] session_start() - start session
+  [ ] session_destroy() - destroy session
+  [ ] session_id() - get/set session ID
+  [ ] session_name() - get/set session name
+  [ ] session_regenerate_id() - regenerate session ID
+  [ ] session_write_close() - write and close session
+
+File Upload Handling:
+  [ ] move_uploaded_file() - move uploaded file
+  [ ] is_uploaded_file() - check if file was uploaded
+  [ ] Handle $_FILES array structure
+
+Stream/File Functions:
+  [ ] fopen() / fclose() - open/close file handle
+  [ ] fread() / fwrite() - read/write to file handle
+  [ ] fgets() / fputs() - line-based file operations
+  [ ] feof() - check end of file
+  [ ] fseek() / ftell() / rewind() - file pointer operations
+  [ ] file() - read entire file into array (already exists, verify)
+  [ ] readfile() - output file contents
+  [ ] fgetcsv() / fputcsv() - CSV operations
+
+Directory/Filesystem Functions:
+  [ ] mkdir() / rmdir() - create/remove directories
+  [ ] chmod() / chown() / chgrp() - change permissions/owner
+  [ ] copy() / rename() / unlink() - file operations
+  [ ] scandir() - list directory contents
+  [ ] opendir() / readdir() / closedir() - directory iteration
+  [ ] disk_free_space() / disk_total_space()
+  [ ] touch() - set file modification time
+
+HTTP Client (for WordPress HTTP API):
+  [ ] cURL extension (curl_init, curl_exec, curl_setopt, etc.)
+    OR
+  [ ] stream_context_create() with HTTP wrapper
+  [ ] file_get_contents() with HTTP URLs (already exists, verify)
+
+Error Handling:
+  [X] try/catch exception handling (exists, verify finally)
+  [X] throw statement (exists)
+  [ ] Exception class hierarchy (base Exception exists, need subclasses)
+  [ ] set_error_handler() / restore_error_handler()
+  [ ] set_exception_handler() / restore_exception_handler()
+  [ ] trigger_error() - trigger user errors
+  [ ] error_reporting() - get/set error reporting level
+  [ ] E_WARNING, E_NOTICE, E_DEPRECATED levels (currently only E_ERROR)
+
+Additional String Functions (commonly used by WP):
+  [ ] parse_url() - parse URL into components (partially may exist)
+  [ ] http_build_query() - build URL query string
+  [ ] urlencode() / urldecode() / rawurlencode() / rawurldecode()
+  [ ] parse_str() - parse query string into variables
+  [ ] strtr() - translate characters
+  [ ] str_replace() variations (case-insensitive, count)
+  [ ] substr_count() / substr_compare()
+  [ ] strpbrk() / strstr() / strchr() / strrchr()
+  [ ] levenshtein() / similar_text() / soundex()
+
+Additional Array Functions (commonly used by WP):
+  [ ] array_splice() - remove/replace portion of array
+  [X] array_walk() - apply function to array (basic version exists)
+  [ ] array_walk_recursive() - recursive version
+  [ ] array_multisort() - sort multiple arrays
+  [X] usort() - user-defined sort (exists)
+  [ ] uasort() / uksort() - associative user-defined sort
+  [ ] asort() / arsort() / ksort() / krsort() - associative sort
+  [ ] array_pad() - pad array to length
+  [X] array_rand() - pick random keys (exists)
+  [ ] compact() / extract() - variable/array conversion
+  [ ] list() construct for array unpacking
+
+WordPress-Specific PHP Requirements:
+  [ ] spl_autoload_register() - class autoloading
+  [ ] class_alias() - create alias for class
+  [ ] get_class() / get_parent_class() / get_class_methods()
+  [ ] method_exists() / property_exists()
+  [X] instanceof operator (supported)
+  [X] call_user_func() / call_user_func_array() (exist)
+  [X] function_exists() / class_exists() (exist)
+
+MEDIUM PRIORITY - Enhanced WordPress Support
+==============================================
+
+Image Manipulation (for media library):
+  [ ] GD library basics (imagecreatetruecolor, imagecopyresampled, etc.)
+  [ ] Image formats (JPEG, PNG, GIF, WebP)
+  [ ] getimagesize() / image_type_to_mime_type()
+  [ ] exif_read_data() - read EXIF data from images
+
+XML Support (for RSS/Atom feeds, XML-RPC):
+  [ ] SimpleXML extension (simplexml_load_string, etc.)
+  [ ] XMLReader / XMLWriter
+  [ ] xml_parse() / xml_parser_create() - XML parser
+  [ ] DOMDocument class
+
+Date/Time Enhancements:
+  [ ] DateTime class and methods
+  [ ] DateTimeZone class
+  [ ] date_create() / date_format()
+  [ ] strftime() / gmstrftime() - locale-aware formatting
+  [ ] timezone functions (timezone_identifiers_list, etc.)
+
+Filter/Validation Functions:
+  [ ] filter_var() - filter a variable
+  [ ] filter_input() - get and filter input
+  [ ] filter_var_array() / filter_input_array()
+  [ ] FILTER_* constants (FILTER_VALIDATE_EMAIL, etc.)
+
+Additional Encoding Functions:
+  [ ] convert_uuencode() / convert_uudecode()
+  [ ] quoted_printable_encode() / quoted_printable_decode()
+  [ ] bin2hex() / hex2bin()
+
+Network Functions:
+  [ ] gethostbyname() / gethostbyaddr()
+  [ ] ip2long() / long2ip()
+  [ ] inet_pton() / inet_ntop()
+  [ ] dns_get_record()
+
+Variable Handling:
+  [X] isset() / empty() (exist as language constructs)
+  [ ] unset() (verify implementation)
+  [ ] get_defined_vars() / get_defined_constants()
+  [ ] debug_backtrace() / debug_print_backtrace()
+  [ ] var_export() - export variable as PHP code
+
+Object Serialization:
+  [ ] Serializable interface
+  [ ] JsonSerializable interface
+  [ ] __serialize() / __unserialize() magic methods (PHP 7.4+)
+
+Stream Functions:
+  [ ] stream_context_create() / stream_context_set_option()
+  [ ] stream_get_contents() / stream_copy_to_stream()
+  [ ] stream_filter_append() / stream_filter_prepend()
+
+LOWER PRIORITY - Nice to Have
+==============================================
+
+Caching Extensions (for WordPress object cache):
+  [ ] APCu extension (apcu_fetch, apcu_store, etc.)
+  [ ] Memcached extension
+  [ ] Redis extension
+  [ ] Basic in-memory cache implementation
+
+Compression:
+  [ ] gzip/deflate (gzcompress, gzuncompress, etc.)
+  [ ] ZIP archive (ZipArchive class)
+  [ ] tar support
+
+OpenSSL/Crypto:
+  [ ] openssl_encrypt() / openssl_decrypt()
+  [ ] openssl_random_pseudo_bytes()
+  [ ] password_hash() / password_verify() (modern PHP)
+  [ ] sodium extension (PHP 7.2+)
+
+Multi-byte String Functions:
+  [ ] mb_strlen() / mb_substr() / mb_strpos()
+  [ ] mb_convert_encoding() / mb_detect_encoding()
+  [ ] mb_strtoupper() / mb_strtolower()
+
+Internationalization:
+  [ ] iconv() / iconv_strlen() / iconv_substr()
+  [ ] gettext() / _() - translation functions
+  [ ] Locale class
+
+PCRE Enhancements:
+  [ ] Named capture groups
+  [ ] Lookbehinds and lookaheads
+  [ ] Unicode property escapes
+  [ ] All PCRE flags and modifiers
+
+SPL (Standard PHP Library):
+  [ ] SPL iterators (DirectoryIterator, RecursiveDirectoryIterator, etc.)
+  [ ] SPL data structures (SplFixedArray, SplQueue, etc.)
+  [ ] SPL exceptions (InvalidArgumentException, etc.)
+
+Output Control Enhancements:
+  [ ] ob_start() callback parameter
+  [ ] ob_list_handlers()
+  [ ] ob_get_status()
+
+NOTES
+==============================================
+- WordPress requires PHP 7.4+ (recommend targeting PHP 8.0+)
+- Core WordPress can run with limited extensions if database + HTTP work
+- Many WordPress plugins require additional extensions (GD, cURL, etc.)
+- REST API requires JSON (already supported ✓)
+- Block editor (Gutenberg) heavily uses REST API
+- Consider implementing most critical features first, then expand
+- Some features like cURL can be substituted with stream wrappers
+
+ALREADY IMPLEMENTED (WordPress-relevant)
+==============================================
+
+Language Features:
+  ✓ Classes, inheritance, interfaces, traits, abstract classes
+  ✓ Magic methods (__construct, __destruct, __get, __set, __call, __toString, __clone, etc.)
+  ✓ Visibility modifiers (public, protected, private)
+  ✓ Static properties and methods
+  ✓ Namespaces with use statements and aliasing
+  ✓ Attributes (PHP 8+ decorators/annotations)
+  ✓ Generators (yield, yield from)
+  ✓ Named arguments
+  ✓ Reflection API (ReflectionClass, ReflectionMethod, etc.)
+  ✓ Constructor property promotion
+  ✓ Strict types (declare(strict_types=1))
+  ✓ ArrayAccess and Iterator interfaces
+  ✓ Serialization (__sleep, __wakeup, serialize(), unserialize())
+  ✓ Output buffering (ob_start, ob_get_contents, etc.)
+  ✓ try/catch/throw exception handling
+  ✓ instanceof operator
+  ✓ isset() / empty() language constructs
+
+Built-in Functions (100+ total):
+  ✓ String: strlen, substr, strpos, str_replace, explode, implode, trim, sprintf,
+    strtoupper, strtolower, ucfirst, str_contains, str_starts_with, str_ends_with,
+    htmlspecialchars, addslashes, etc.
+  ✓ Array: count, array_push, array_pop, array_merge, array_keys, array_values,
+    array_slice, array_search, in_array, array_map, array_filter, array_reduce,
+    array_unique, array_flip, sort, rsort, usort, array_walk, array_rand, etc.
+  ✓ Math: abs, ceil, floor, round, max, min, pow, sqrt, rand, sin, cos, tan, log
+  ✓ Type: gettype, is_null, is_bool, is_int, is_string, is_array, is_object,
+    intval, floatval, strval, boolval, is_numeric
+  ✓ File: file_get_contents, file_put_contents, file_exists, is_file, is_dir,
+    is_readable, is_writable, file, dirname, basename, pathinfo, realpath, glob
+  ✓ Date/Time: time, date, strtotime, mktime, microtime
+  ✓ Regex: preg_match, preg_match_all, preg_replace, preg_split
+  ✓ Hash: md5, sha1, hash, base64_encode, base64_decode
+  ✓ JSON: json_encode, json_decode
+  ✓ Reflection: function_exists, class_exists, call_user_func, call_user_func_array
+  ✓ Output: var_dump, print_r, ob_* functions
+  ✓ Misc: defined, func_get_args, func_num_args
+
+Estimated Completion for WordPress Core:
+  - With HIGH PRIORITY items: ~60% (enough for basic WP boot with plugins disabled)
+  - With MEDIUM PRIORITY items: ~85% (enough for full WP including most plugins)
+  - With LOWER PRIORITY items: ~95% (enough for WP + advanced plugins + performance)
