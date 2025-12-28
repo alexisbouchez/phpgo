@@ -338,6 +338,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinPrintR
 	case "var_export":
 		return i.builtinVarExport
+	case "debug_backtrace":
+		return i.builtinDebugBacktrace
+	case "debug_print_backtrace":
+		return i.builtinDebugPrintBacktrace
 
 	// Error handling
 	case "trigger_error":
@@ -394,6 +398,18 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinMemoryGetUsage
 	case "memory_get_peak_usage":
 		return builtinMemoryGetPeakUsage
+	case "getmypid":
+		return builtinGetmypid
+	case "getmyuid":
+		return builtinGetmyuid
+	case "getmygid":
+		return builtinGetmygid
+	case "get_current_user":
+		return builtinGetCurrentUser
+	case "php_uname":
+		return builtinPhpUname
+	case "phpinfo":
+		return i.builtinPhpinfo
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -3514,6 +3530,66 @@ func builtinMemoryGetPeakUsage(args ...runtime.Value) runtime.Value {
 	goruntime.ReadMemStats(&m)
 	// Return peak memory usage in bytes
 	return runtime.NewInt(int64(m.TotalAlloc))
+}
+
+func builtinGetmypid(args ...runtime.Value) runtime.Value {
+	return runtime.NewInt(int64(os.Getpid()))
+}
+
+func builtinGetmyuid(args ...runtime.Value) runtime.Value {
+	return runtime.NewInt(int64(os.Getuid()))
+}
+
+func builtinGetmygid(args ...runtime.Value) runtime.Value {
+	return runtime.NewInt(int64(os.Getgid()))
+}
+
+func builtinGetCurrentUser(args ...runtime.Value) runtime.Value {
+	if u, err := os.UserHomeDir(); err == nil {
+		// Extract username from home directory as fallback
+		parts := strings.Split(u, string(os.PathSeparator))
+		if len(parts) > 0 {
+			return runtime.NewString(parts[len(parts)-1])
+		}
+	}
+	return runtime.NewString("")
+}
+
+func builtinPhpUname(args ...runtime.Value) runtime.Value {
+	mode := "a"
+	if len(args) > 0 {
+		mode = args[0].ToString()
+	}
+
+	sysname := goruntime.GOOS
+	nodename, _ := os.Hostname()
+	release := "unknown"
+	version := "unknown"
+	machine := goruntime.GOARCH
+
+	switch mode {
+	case "s":
+		return runtime.NewString(sysname)
+	case "n":
+		return runtime.NewString(nodename)
+	case "r":
+		return runtime.NewString(release)
+	case "v":
+		return runtime.NewString(version)
+	case "m":
+		return runtime.NewString(machine)
+	default:
+		// Return all info
+		return runtime.NewString(fmt.Sprintf("%s %s %s %s %s", sysname, nodename, release, version, machine))
+	}
+}
+
+func (i *Interpreter) builtinPhpinfo(args ...runtime.Value) runtime.Value {
+	info := "phpgo " + builtinPhpversion().ToString() + "\n"
+	info += "System: " + builtinPhpUname().ToString() + "\n"
+	info += "Build Date: unknown\n"
+	i.output.WriteString(info)
+	return runtime.TRUE
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
@@ -8865,6 +8941,20 @@ func (i *Interpreter) setCookieInternal(args []runtime.Value, urlEncode bool) ru
 
 	i.httpContext.ResponseHeaders = append(i.httpContext.ResponseHeaders, "Set-Cookie: "+cookie)
 	return runtime.TRUE
+}
+
+// Debug functions
+
+func (i *Interpreter) builtinDebugBacktrace(args ...runtime.Value) runtime.Value {
+	// TODO: Implement proper call stack tracking
+	// For now, return an empty array
+	return runtime.NewArray()
+}
+
+func (i *Interpreter) builtinDebugPrintBacktrace(args ...runtime.Value) runtime.Value {
+	// TODO: Implement proper call stack tracking
+	// For now, do nothing
+	return runtime.NULL
 }
 
 // Error and exception handler functions

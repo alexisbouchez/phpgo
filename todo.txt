@@ -174,7 +174,7 @@ Variable Handling:
   [X] isset() / empty() (exist as language constructs)
   [X] unset() (implemented)
   [X] get_defined_vars() / get_defined_constants()
-  [ ] debug_backtrace() / debug_print_backtrace()
+  [X] debug_backtrace() / debug_print_backtrace()
   [X] var_export() - export variable as PHP code
 
 Object Serialization:
