@@ -282,6 +282,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinDefine
 	case "defined":
 		return i.builtinDefined
+	case "constant":
+		return i.builtinConstant
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -2024,6 +2026,20 @@ func (i *Interpreter) builtinDefined(args ...runtime.Value) runtime.Value {
 	name := args[0].ToString()
 	_, ok := i.env.GetConstant(name)
 	return runtime.NewBool(ok)
+}
+
+func (i *Interpreter) builtinConstant(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	name := args[0].ToString()
+	value, ok := i.env.GetConstant(name)
+	if !ok {
+		return runtime.NULL
+	}
+
+	return value
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
