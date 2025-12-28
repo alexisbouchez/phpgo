@@ -299,6 +299,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinVersionCompare
 	case "phpversion":
 		return builtinPhpversion
+	case "extension_loaded":
+		return builtinExtensionLoaded
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -2349,6 +2351,33 @@ func builtinPhpversion(args ...runtime.Value) runtime.Value {
 	// Return a version that indicates PHP 8.0 compatibility
 	// This is the version phpgo emulates
 	return runtime.NewString("8.0.0")
+}
+
+func builtinExtensionLoaded(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	extension := strings.ToLower(args[0].ToString())
+
+	// List of built-in extensions that phpgo supports
+	supportedExtensions := map[string]bool{
+		"json":       true,
+		"pcre":       true,
+		"hash":       true,
+		"reflection": true,
+		"spl":        true,
+		"standard":   true,
+		"core":       true,
+		"date":       true,
+		"filter":     true,
+	}
+
+	if supportedExtensions[extension] {
+		return runtime.TRUE
+	}
+
+	return runtime.FALSE
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
