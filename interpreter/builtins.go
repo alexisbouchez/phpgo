@@ -117,6 +117,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinSubstr
 	case "strpos":
 		return builtinStrpos
+	case "stripos":
+		return builtinStripos
+	case "strrpos":
+		return builtinStrrpos
+	case "strripos":
+		return builtinStrripos
+	case "stristr":
+		return builtinStristr
 	case "str_replace":
 		return builtinStrReplace
 	case "strtoupper":
@@ -823,6 +831,85 @@ func builtinStrpos(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.NewInt(int64(pos + offset))
+}
+
+func builtinStripos(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	haystack := strings.ToLower(args[0].ToString())
+	needle := strings.ToLower(args[1].ToString())
+	offset := 0
+	if len(args) >= 3 {
+		offset = int(args[2].ToInt())
+	}
+
+	pos := strings.Index(haystack[offset:], needle)
+	if pos == -1 {
+		return runtime.FALSE
+	}
+	return runtime.NewInt(int64(pos + offset))
+}
+
+func builtinStrrpos(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	haystack := args[0].ToString()
+	needle := args[1].ToString()
+	offset := 0
+	if len(args) >= 3 {
+		offset = int(args[2].ToInt())
+	}
+
+	pos := strings.LastIndex(haystack[offset:], needle)
+	if pos == -1 {
+		return runtime.FALSE
+	}
+	return runtime.NewInt(int64(pos + offset))
+}
+
+func builtinStrripos(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	haystack := strings.ToLower(args[0].ToString())
+	needle := strings.ToLower(args[1].ToString())
+	offset := 0
+	if len(args) >= 3 {
+		offset = int(args[2].ToInt())
+	}
+
+	pos := strings.LastIndex(haystack[offset:], needle)
+	if pos == -1 {
+		return runtime.FALSE
+	}
+	return runtime.NewInt(int64(pos + offset))
+}
+
+func builtinStristr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	haystack := args[0].ToString()
+	needle := args[1].ToString()
+
+	// Case-insensitive search
+	pos := strings.Index(strings.ToLower(haystack), strings.ToLower(needle))
+	if pos == -1 {
+		return runtime.FALSE
+	}
+
+	// Return substring from first occurrence to end (preserving original case)
+	beforeNeedle := false
+	if len(args) >= 3 {
+		beforeNeedle = args[2].ToBool()
+	}
+
+	if beforeNeedle {
+		return runtime.NewString(haystack[:pos])
+	}
+	return runtime.NewString(haystack[pos:])
 }
 
 func builtinStrReplace(args ...runtime.Value) runtime.Value {
