@@ -344,6 +344,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinTriggerError
 	case "error_reporting":
 		return i.builtinErrorReporting
+	case "set_error_handler":
+		return i.builtinSetErrorHandler
+	case "restore_error_handler":
+		return i.builtinRestoreErrorHandler
+	case "set_exception_handler":
+		return i.builtinSetExceptionHandler
+	case "restore_exception_handler":
+		return i.builtinRestoreExceptionHandler
 
 	// Output buffering functions
 	case "ob_start":
@@ -652,6 +660,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinHeaderRemove
 	case "http_response_code":
 		return i.builtinHttpResponseCode
+	case "setcookie":
+		return i.builtinSetcookie
+	case "setrawcookie":
+		return i.builtinSetrawcookie
 	case "urlencode":
 		return builtinUrlencode
 	case "urldecode":
@@ -762,6 +774,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinFputcsv
 	case "unlink":
 		return builtinUnlink
+	case "move_uploaded_file":
+		return i.builtinMoveUploadedFile
+	case "is_uploaded_file":
+		return i.builtinIsUploadedFile
 	case "copy":
 		return builtinCopy
 	case "rename":
@@ -8776,4 +8792,181 @@ func (i *Interpreter) builtinSessionWriteClose(args ...runtime.Value) runtime.Va
 	// In this implementation, sessions are in-memory, so this is a no-op
 	// In a real implementation, this would write session data to storage
 	return runtime.NULL
+}
+
+// Cookie functions
+
+func (i *Interpreter) builtinSetcookie(args ...runtime.Value) runtime.Value {
+	return i.setCookieInternal(args, true)
+}
+
+func (i *Interpreter) builtinSetrawcookie(args ...runtime.Value) runtime.Value {
+	return i.setCookieInternal(args, false)
+}
+
+func (i *Interpreter) setCookieInternal(args []runtime.Value, urlEncode bool) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	if i.httpContext.HeadersSent {
+		return runtime.FALSE
+	}
+
+	name := args[0].ToString()
+	value := ""
+	if len(args) >= 2 {
+		value = args[1].ToString()
+		if urlEncode {
+			value = url.QueryEscape(value)
+		}
+	}
+
+	// Build cookie header
+	cookie := name + "=" + value
+
+	// Expires/Max-Age
+	if len(args) >= 3 {
+		expires := args[2].ToInt()
+		if expires > 0 {
+			t := time.Unix(expires, 0).UTC()
+			cookie += "; Expires=" + t.Format(time.RFC1123)
+		} else if expires < 0 {
+			// Delete cookie
+			cookie += "; Expires=Thu, 01 Jan 1970 00:00:00 GMT"
+		}
+	}
+
+	// Path
+	if len(args) >= 4 {
+		path := args[3].ToString()
+		if path != "" {
+			cookie += "; Path=" + path
+		}
+	}
+
+	// Domain
+	if len(args) >= 5 {
+		domain := args[4].ToString()
+		if domain != "" {
+			cookie += "; Domain=" + domain
+		}
+	}
+
+	// Secure
+	if len(args) >= 6 && args[5].ToBool() {
+		cookie += "; Secure"
+	}
+
+	// HttpOnly
+	if len(args) >= 7 && args[6].ToBool() {
+		cookie += "; HttpOnly"
+	}
+
+	i.httpContext.ResponseHeaders = append(i.httpContext.ResponseHeaders, "Set-Cookie: "+cookie)
+	return runtime.TRUE
+}
+
+// Error and exception handler functions
+
+func (i *Interpreter) builtinSetErrorHandler(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	handler := args[0]
+
+	// Return previous handler or null
+	var previous runtime.Value = runtime.NULL
+	if len(i.errorHandlers) > 0 {
+		previous = i.errorHandlers[len(i.errorHandlers)-1]
+	}
+
+	// Push new handler onto stack
+	i.errorHandlers = append(i.errorHandlers, handler)
+
+	return previous
+}
+
+func (i *Interpreter) builtinRestoreErrorHandler(args ...runtime.Value) runtime.Value {
+	if len(i.errorHandlers) > 0 {
+		i.errorHandlers = i.errorHandlers[:len(i.errorHandlers)-1]
+		return runtime.TRUE
+	}
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinSetExceptionHandler(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	handler := args[0]
+
+	// Return previous handler or null
+	var previous runtime.Value = runtime.NULL
+	if len(i.exceptionHandlers) > 0 {
+		previous = i.exceptionHandlers[len(i.exceptionHandlers)-1]
+	}
+
+	// Push new handler onto stack
+	i.exceptionHandlers = append(i.exceptionHandlers, handler)
+
+	return previous
+}
+
+func (i *Interpreter) builtinRestoreExceptionHandler(args ...runtime.Value) runtime.Value {
+	if len(i.exceptionHandlers) > 0 {
+		i.exceptionHandlers = i.exceptionHandlers[:len(i.exceptionHandlers)-1]
+		return runtime.TRUE
+	}
+	return runtime.FALSE
+}
+
+// File upload functions
+
+func (i *Interpreter) builtinIsUploadedFile(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	if _, ok := i.httpContext.UploadedFiles[filename]; ok {
+		return runtime.TRUE
+	}
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinMoveUploadedFile(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	source := args[0].ToString()
+	destination := args[1].ToString()
+
+	// Check if file was uploaded
+	if _, ok := i.httpContext.UploadedFiles[source]; !ok {
+		return runtime.FALSE
+	}
+
+	// Read source file
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Write to destination
+	err = os.WriteFile(destination, data, 0644)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Remove source file
+	os.Remove(source)
+
+	// Remove from uploaded files tracking
+	delete(i.httpContext.UploadedFiles, source)
+
+	return runtime.TRUE
 }

@@ -42,24 +42,24 @@ Superglobals (proper population and HTTP context):
 
 HTTP Functions:
   [X] http_build_query() - build URL query string
-  [ ] header() - send HTTP headers
-  [ ] headers_sent() - check if headers already sent
-  [ ] setcookie() / setrawcookie() - set HTTP cookies
-  [ ] http_response_code() - get/set HTTP response code
-  [ ] header_remove() - remove previously set headers
-  [ ] headers_list() - list sent headers
+  [X] header() - send HTTP headers
+  [X] headers_sent() - check if headers already sent
+  [X] setcookie() / setrawcookie() - set HTTP cookies
+  [X] http_response_code() - get/set HTTP response code
+  [X] header_remove() - remove previously set headers
+  [X] headers_list() - list sent headers
 
 Session Support:
   [X] session_start() - start session
   [X] session_destroy() - destroy session
   [X] session_id() - get/set session ID
   [X] session_name() - get/set session name
-  [ ] session_regenerate_id() - regenerate session ID
-  [ ] session_write_close() - write and close session
+  [X] session_regenerate_id() - regenerate session ID
+  [X] session_write_close() - write and close session
 
 File Upload Handling:
-  [ ] move_uploaded_file() - move uploaded file
-  [ ] is_uploaded_file() - check if file was uploaded
+  [X] move_uploaded_file() - move uploaded file
+  [X] is_uploaded_file() - check if file was uploaded
   [ ] Handle $_FILES array structure
 
 Stream/File Functions:
@@ -80,7 +80,7 @@ Directory/Filesystem Functions:
   [X] opendir() / readdir() / closedir() - directory iteration
   [X] disk_free_space() / disk_total_space()
   [X] touch() - set file modification time
-  [ ] chown() / chgrp() - change owner/group
+  [X] chown() / chgrp() - change owner/group
 
 HTTP Client (for WordPress HTTP API):
   [ ] cURL extension (curl_init, curl_exec, curl_setopt, etc.)
@@ -92,8 +92,8 @@ Error Handling:
   [X] try/catch exception handling (exists, verify finally)
   [X] throw statement (exists)
   [ ] Exception class hierarchy (base Exception exists, need subclasses)
-  [ ] set_error_handler() / restore_error_handler()
-  [ ] set_exception_handler() / restore_exception_handler()
+  [X] set_error_handler() / restore_error_handler()
+  [X] set_exception_handler() / restore_exception_handler()
   [X] trigger_error() - trigger user errors
   [X] error_reporting() - get/set error reporting level
   [ ] E_WARNING, E_NOTICE, E_DEPRECATED levels (currently only E_ERROR)

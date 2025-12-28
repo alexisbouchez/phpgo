@@ -32,9 +32,11 @@ type Interpreter struct {
 	strictTypes      bool                // Whether strict_types is enabled
 	resources        map[int64]*runtime.Resource // Open resources (files, etc.)
 	nextResourceID   int64               // Next resource ID
-	autoloadFuncs    []runtime.Value     // Registered autoload functions
-	iniSettings      map[string]string   // PHP ini settings
-	httpContext      *HTTPContext        // HTTP request context
+	autoloadFuncs     []runtime.Value     // Registered autoload functions
+	iniSettings       map[string]string   // PHP ini settings
+	httpContext       *HTTPContext        // HTTP request context
+	errorHandlers     []runtime.Value     // Stack of error handlers
+	exceptionHandlers []runtime.Value     // Stack of exception handlers
 }
 
 // HTTPContext represents HTTP request information
@@ -47,11 +49,12 @@ type HTTPContext struct {
 	PostData        map[string]string
 	Files           map[string][]byte
 	ServerVars      map[string]string
-	ResponseHeaders []string // Response headers to be sent
-	ResponseCode    int      // HTTP response code
-	HeadersSent     bool     // Whether headers have been sent
-	SessionID       string   // Current session ID
-	SessionStarted  bool     // Whether session has been started
+	ResponseHeaders []string          // Response headers to be sent
+	ResponseCode    int               // HTTP response code
+	HeadersSent     bool              // Whether headers have been sent
+	SessionID       string            // Current session ID
+	SessionStarted  bool              // Whether session has been started
+	UploadedFiles   map[string]bool   // Track temp paths of uploaded files
 }
 
 // New creates a new interpreter.
@@ -79,6 +82,7 @@ func New() *Interpreter {
 			ServerVars:      make(map[string]string),
 			ResponseHeaders: make([]string, 0),
 			ResponseCode:    200,
+			UploadedFiles:   make(map[string]bool),
 		},
 	}
 	// Initialize default ini settings
