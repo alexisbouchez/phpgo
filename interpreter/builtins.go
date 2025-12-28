@@ -435,6 +435,22 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "parse_str":
 		return i.builtinParseStr
 
+	// Object/Class introspection
+	case "get_class":
+		return builtinGetClass
+	case "get_parent_class":
+		return builtinGetParentClass
+	case "get_class_methods":
+		return builtinGetClassMethods
+	case "method_exists":
+		return builtinMethodExists
+	case "property_exists":
+		return builtinPropertyExists
+	case "is_subclass_of":
+		return i.builtinIsSubclassOf
+	case "is_a":
+		return i.builtinIsA
+
 	default:
 		return nil
 	}
@@ -3699,4 +3715,229 @@ func (i *Interpreter) builtinParseStr(args ...runtime.Value) runtime.Value {
 	// If second argument provided, assign to that variable (needs env access)
 	// For now, just return the array
 	return result
+}
+
+// ----------------------------------------------------------------------------
+// Object/Class introspection functions
+
+func builtinGetClass(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	obj, ok := args[0].(*runtime.Object)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(obj.Class.Name)
+}
+
+func builtinGetParentClass(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	// Can accept object or class name string
+	var class *runtime.Class
+	switch v := args[0].(type) {
+	case *runtime.Object:
+		class = v.Class
+	case *runtime.String:
+		// TODO: Look up class by name from environment
+		// For now, return false
+		return runtime.FALSE
+	default:
+		return runtime.FALSE
+	}
+
+	if class.Parent != nil {
+		return runtime.NewString(class.Parent.Name)
+	}
+
+	return runtime.FALSE
+}
+
+func builtinGetClassMethods(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	var class *runtime.Class
+	switch v := args[0].(type) {
+	case *runtime.Object:
+		class = v.Class
+	case *runtime.String:
+		// TODO: Look up class by name from environment
+		return runtime.FALSE
+	default:
+		return runtime.FALSE
+	}
+
+	// Use map to track unique method names
+	methodSet := make(map[string]bool)
+
+	// Add methods from current class
+	for methodName := range class.Methods {
+		methodSet[methodName] = true
+	}
+
+	// Add inherited methods (won't duplicate due to map)
+	current := class.Parent
+	for current != nil {
+		for methodName := range current.Methods {
+			methodSet[methodName] = true
+		}
+		current = current.Parent
+	}
+
+	// Build result array
+	result := runtime.NewArray()
+	for methodName := range methodSet {
+		result.Set(nil, runtime.NewString(methodName))
+	}
+
+	return result
+}
+
+func builtinMethodExists(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	var class *runtime.Class
+	switch v := args[0].(type) {
+	case *runtime.Object:
+		class = v.Class
+	case *runtime.String:
+		// TODO: Look up class by name from environment
+		return runtime.FALSE
+	default:
+		return runtime.FALSE
+	}
+
+	methodName := args[1].ToString()
+
+	// Check in current class
+	if _, ok := class.Methods[methodName]; ok {
+		return runtime.TRUE
+	}
+
+	// Check in parent classes
+	current := class.Parent
+	for current != nil {
+		if _, ok := current.Methods[methodName]; ok {
+			return runtime.TRUE
+		}
+		current = current.Parent
+	}
+
+	return runtime.FALSE
+}
+
+func builtinPropertyExists(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	propertyName := args[1].ToString()
+
+	switch v := args[0].(type) {
+	case *runtime.Object:
+		// Check instance properties
+		if _, ok := v.Properties[propertyName]; ok {
+			return runtime.TRUE
+		}
+		// Check class-defined properties
+		if _, ok := v.Class.Properties[propertyName]; ok {
+			return runtime.TRUE
+		}
+		// Check parent class properties
+		current := v.Class.Parent
+		for current != nil {
+			if _, ok := current.Properties[propertyName]; ok {
+				return runtime.TRUE
+			}
+			current = current.Parent
+		}
+	case *runtime.String:
+		// TODO: Look up class by name and check static properties
+		return runtime.FALSE
+	default:
+		return runtime.FALSE
+	}
+
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinIsSubclassOf(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	var class *runtime.Class
+	switch v := args[0].(type) {
+	case *runtime.Object:
+		class = v.Class
+	case *runtime.String:
+		// TODO: Look up class by name from environment
+		return runtime.FALSE
+	default:
+		return runtime.FALSE
+	}
+
+	parentName := args[1].ToString()
+
+	// Walk up the inheritance chain
+	current := class.Parent
+	for current != nil {
+		if current.Name == parentName {
+			return runtime.TRUE
+		}
+		current = current.Parent
+	}
+
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinIsA(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	var class *runtime.Class
+	switch v := args[0].(type) {
+	case *runtime.Object:
+		class = v.Class
+	case *runtime.String:
+		// TODO: Look up class by name from environment
+		return runtime.FALSE
+	default:
+		return runtime.FALSE
+	}
+
+	className := args[1].ToString()
+
+	// Check if it's the same class
+	if class.Name == className {
+		return runtime.TRUE
+	}
+
+	// Walk up the inheritance chain
+	current := class.Parent
+	for current != nil {
+		if current.Name == className {
+			return runtime.TRUE
+		}
+		current = current.Parent
+	}
+
+	// Check interfaces
+	for _, iface := range class.Interfaces {
+		if iface.Name == className {
+			return runtime.TRUE
+		}
+	}
+
+	return runtime.FALSE
 }
