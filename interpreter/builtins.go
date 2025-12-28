@@ -451,6 +451,20 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "is_a":
 		return i.builtinIsA
 
+	// Additional string functions
+	case "strstr", "strchr":
+		return builtinStrstr
+	case "strrchr":
+		return builtinStrrchr
+	case "substr_count":
+		return builtinSubstrCount
+	case "substr_compare":
+		return builtinSubstrCompare
+	case "strtr":
+		return builtinStrtr
+	case "str_ireplace":
+		return builtinStrIreplace
+
 	default:
 		return nil
 	}
@@ -3940,4 +3954,227 @@ func (i *Interpreter) builtinIsA(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+// ----------------------------------------------------------------------------
+// Additional string functions
+
+func builtinStrstr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	haystack := args[0].ToString()
+	needle := args[1].ToString()
+
+	if needle == "" {
+		return runtime.FALSE
+	}
+
+	beforeNeedle := false
+	if len(args) >= 3 {
+		beforeNeedle = args[2].ToBool()
+	}
+
+	idx := strings.Index(haystack, needle)
+	if idx == -1 {
+		return runtime.FALSE
+	}
+
+	if beforeNeedle {
+		return runtime.NewString(haystack[:idx])
+	}
+	return runtime.NewString(haystack[idx:])
+}
+
+func builtinStrrchr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	haystack := args[0].ToString()
+	needle := args[1].ToString()
+
+	if needle == "" {
+		return runtime.FALSE
+	}
+
+	// Find last occurrence (use first character of needle for single-char search)
+	char := needle[0]
+	idx := strings.LastIndexByte(haystack, char)
+	if idx == -1 {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(haystack[idx:])
+}
+
+func builtinSubstrCount(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+
+	haystack := args[0].ToString()
+	needle := args[1].ToString()
+
+	if needle == "" {
+		return runtime.NewInt(0)
+	}
+
+	offset := 0
+	length := len(haystack)
+
+	if len(args) >= 3 {
+		offset = int(args[2].ToInt())
+		if offset < 0 {
+			offset = len(haystack) + offset
+		}
+		if offset < 0 || offset >= len(haystack) {
+			return runtime.NewInt(0)
+		}
+	}
+
+	if len(args) >= 4 {
+		length = int(args[3].ToInt())
+		if length < 0 {
+			length = len(haystack) - offset + length
+		}
+		if offset+length > len(haystack) {
+			length = len(haystack) - offset
+		}
+	}
+
+	substring := haystack[offset : offset+length]
+	count := strings.Count(substring, needle)
+	return runtime.NewInt(int64(count))
+}
+
+func builtinSubstrCompare(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+
+	mainStr := args[0].ToString()
+	str := args[1].ToString()
+	offset := int(args[2].ToInt())
+
+	if offset < 0 || offset >= len(mainStr) {
+		return runtime.FALSE
+	}
+
+	length := len(str)
+	if len(args) >= 4 {
+		length = int(args[3].ToInt())
+	}
+
+	caseInsensitive := false
+	if len(args) >= 5 {
+		caseInsensitive = args[4].ToBool()
+	}
+
+	// Extract substring from mainStr starting at offset
+	if offset+length > len(mainStr) {
+		length = len(mainStr) - offset
+	}
+	substring := mainStr[offset : offset+length]
+
+	// Limit str to length as well
+	if length < len(str) {
+		str = str[:length]
+	}
+
+	if caseInsensitive {
+		substring = strings.ToLower(substring)
+		str = strings.ToLower(str)
+	}
+
+	if substring == str {
+		return runtime.NewInt(0)
+	} else if substring < str {
+		return runtime.NewInt(-1)
+	}
+	return runtime.NewInt(1)
+}
+
+func builtinStrtr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("")
+	}
+
+	str := args[0].ToString()
+
+	// Two argument form: replace pairs from associative array
+	if len(args) == 2 {
+		if replaceArray, ok := args[1].(*runtime.Array); ok {
+			result := str
+			for _, key := range replaceArray.Keys {
+				from := key.ToString()
+				to := replaceArray.Elements[key].ToString()
+				result = strings.ReplaceAll(result, from, to)
+			}
+			return runtime.NewString(result)
+		}
+	}
+
+	// Three argument form: character-by-character replacement
+	if len(args) >= 3 {
+		from := args[1].ToString()
+		to := args[2].ToString()
+
+		// Build replacement map
+		replacer := make(map[rune]rune)
+		fromRunes := []rune(from)
+		toRunes := []rune(to)
+
+		for i, r := range fromRunes {
+			if i < len(toRunes) {
+				replacer[r] = toRunes[i]
+			} else {
+				replacer[r] = toRunes[len(toRunes)-1]
+			}
+		}
+
+		result := strings.Map(func(r rune) rune {
+			if replacement, ok := replacer[r]; ok {
+				return replacement
+			}
+			return r
+		}, str)
+
+		return runtime.NewString(result)
+	}
+
+	return runtime.NewString(str)
+}
+
+func builtinStrIreplace(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.NewString("")
+	}
+
+	search := args[0].ToString()
+	replace := args[1].ToString()
+	subject := args[2].ToString()
+
+	// Case-insensitive replace
+	lowerSubject := strings.ToLower(subject)
+	lowerSearch := strings.ToLower(search)
+
+	var result strings.Builder
+	lastIdx := 0
+
+	for {
+		idx := strings.Index(lowerSubject[lastIdx:], lowerSearch)
+		if idx == -1 {
+			result.WriteString(subject[lastIdx:])
+			break
+		}
+
+		actualIdx := lastIdx + idx
+		result.WriteString(subject[lastIdx:actualIdx])
+		result.WriteString(replace)
+		lastIdx = actualIdx + len(search)
+	}
+
+	return runtime.NewString(result.String())
 }
