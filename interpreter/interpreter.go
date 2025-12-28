@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alexisbouchez/phpgo/ast"
 	"github.com/alexisbouchez/phpgo/parser"
@@ -33,6 +34,19 @@ type Interpreter struct {
 	nextResourceID   int64               // Next resource ID
 	autoloadFuncs    []runtime.Value     // Registered autoload functions
 	iniSettings      map[string]string   // PHP ini settings
+	httpContext      *HTTPContext        // HTTP request context
+}
+
+// HTTPContext represents HTTP request information
+type HTTPContext struct {
+	Method        string
+	URI          string
+	QueryString  string
+	Headers      map[string]string
+	Cookies      map[string]string
+	PostData     map[string]string
+	Files        map[string][]byte
+	ServerVars   map[string]string
 }
 
 // New creates a new interpreter.
@@ -52,6 +66,13 @@ func New() *Interpreter {
 		nextResourceID: 1,
 		autoloadFuncs:  make([]runtime.Value, 0),
 		iniSettings:    make(map[string]string),
+		httpContext: &HTTPContext{
+			Headers:    make(map[string]string),
+			Cookies:    make(map[string]string),
+			PostData:   make(map[string]string),
+			Files:      make(map[string][]byte),
+			ServerVars: make(map[string]string),
+		},
 	}
 	// Initialize default ini settings
 	i.iniSettings["display_errors"] = "1"
@@ -62,6 +83,154 @@ func New() *Interpreter {
 	i.iniSettings["post_max_size"] = "8M"
 	i.registerBuiltins()
 	return i
+}
+
+// GetHTTPContext returns the current HTTP context
+func (i *Interpreter) GetHTTPContext() *HTTPContext {
+	return i.httpContext
+}
+
+// GetCurrentDir returns the current directory
+func (i *Interpreter) GetCurrentDir() string {
+	return i.currentDir
+}
+
+// SetHTTPContext sets HTTP request context
+func (i *Interpreter) SetHTTPContext(method, uri, queryString string, headers, cookies, postData map[string]string, files map[string][]byte) {
+	i.httpContext.Method = method
+	i.httpContext.URI = uri
+	i.httpContext.QueryString = queryString
+	i.httpContext.Headers = headers
+	i.httpContext.Cookies = cookies
+	i.httpContext.PostData = postData
+	i.httpContext.Files = files
+	
+	// Set common server variables
+	i.httpContext.ServerVars["REQUEST_METHOD"] = method
+	i.httpContext.ServerVars["REQUEST_URI"] = uri
+	i.httpContext.ServerVars["QUERY_STRING"] = queryString
+	i.httpContext.ServerVars["SERVER_PROTOCOL"] = "HTTP/1.1"
+	i.httpContext.ServerVars["SERVER_SOFTWARE"] = "phpgo/1.0"
+	i.httpContext.ServerVars["REMOTE_ADDR"] = "127.0.0.1"
+	i.httpContext.ServerVars["REMOTE_PORT"] = "12345"
+	i.httpContext.ServerVars["SERVER_ADDR"] = "127.0.0.1"
+	i.httpContext.ServerVars["SERVER_PORT"] = "80"
+	i.httpContext.ServerVars["SERVER_NAME"] = "localhost"
+	i.httpContext.ServerVars["HTTP_HOST"] = "localhost"
+	
+	// Add headers as server variables
+	for key, value := range headers {
+		serverKey := "HTTP_" + strings.ToUpper(strings.ReplaceAll(key, "-", "_"))
+		i.httpContext.ServerVars[serverKey] = value
+	}
+	
+	// Populate superglobals with the new HTTP context
+	i.populateSuperglobals()
+}
+
+// populateSuperglobals populates superglobals with HTTP context
+func (i *Interpreter) populateSuperglobals() {
+	// Populate $_SERVER with basic information
+	server := i.env.Global().GetArray("_SERVER")
+	uri := i.httpContext.URI
+	if uri == "" {
+		uri = "/"
+	}
+
+	server.Set(runtime.NewString("PHP_SELF"), runtime.NewString(uri))
+	server.Set(runtime.NewString("SCRIPT_NAME"), runtime.NewString(uri))
+	
+	// Handle SCRIPT_FILENAME and PATH_TRANSLATED properly
+	scriptPath := i.currentDir + uri
+	if strings.HasPrefix(uri, "/") {
+		scriptPath = i.currentDir + uri
+	} else {
+		scriptPath = i.currentDir + string(os.PathSeparator) + uri
+	}
+	server.Set(runtime.NewString("SCRIPT_FILENAME"), runtime.NewString(scriptPath))
+	server.Set(runtime.NewString("PATH_TRANSLATED"), runtime.NewString(scriptPath))
+	server.Set(runtime.NewString("DOCUMENT_ROOT"), runtime.NewString(i.currentDir))
+	server.Set(runtime.NewString("REQUEST_TIME"), runtime.NewInt(time.Now().Unix()))
+	server.Set(runtime.NewString("REQUEST_TIME_FLOAT"), runtime.NewFloat(float64(time.Now().UnixNano()) / 1e9))
+	server.Set(runtime.NewString("argv"), runtime.NewArray())
+	server.Set(runtime.NewString("argc"), runtime.NewInt(0))
+	
+	// Add HTTP context server variables
+	for key, value := range i.httpContext.ServerVars {
+		server.Set(runtime.NewString(key), runtime.NewString(value))
+	}
+	
+	// Populate $_GET from query string
+	if i.httpContext.QueryString != "" {
+		get := i.env.Global().GetArray("_GET")
+		// Simple query string parsing (key=value&key2=value2)
+		pairs := strings.Split(i.httpContext.QueryString, "&")
+		for _, pair := range pairs {
+			if pair == "" {
+				continue
+			}
+			parts := strings.SplitN(pair, "=", 2)
+			if len(parts) == 2 {
+				get.Set(runtime.NewString(parts[0]), runtime.NewString(parts[1]))
+			} else {
+				get.Set(runtime.NewString(parts[0]), runtime.NewString(""))
+			}
+		}
+	}
+	
+	// Populate $_POST from post data
+	if len(i.httpContext.PostData) > 0 {
+		post := i.env.Global().GetArray("_POST")
+		for key, value := range i.httpContext.PostData {
+			post.Set(runtime.NewString(key), runtime.NewString(value))
+		}
+	}
+	
+	// Populate $_COOKIE from cookies
+	if len(i.httpContext.Cookies) > 0 {
+		cookie := i.env.Global().GetArray("_COOKIE")
+		for key, value := range i.httpContext.Cookies {
+			cookie.Set(runtime.NewString(key), runtime.NewString(value))
+		}
+	}
+	
+	// Populate $_REQUEST (combined GET, POST, COOKIE)
+	request := i.env.Global().GetArray("_REQUEST")
+	if get, ok := i.env.Global().Get("_GET"); ok {
+		if getArr, isArr := get.(*runtime.Array); isArr {
+			for k, v := range getArr.Elements {
+				request.Set(k, v)
+			}
+		}
+	}
+	if post, ok := i.env.Global().Get("_POST"); ok {
+		if postArr, isArr := post.(*runtime.Array); isArr {
+			for k, v := range postArr.Elements {
+				request.Set(k, v)
+			}
+		}
+	}
+	if cookie, ok := i.env.Global().Get("_COOKIE"); ok {
+		if cookieArr, isArr := cookie.(*runtime.Array); isArr {
+			for k, v := range cookieArr.Elements {
+				request.Set(k, v)
+			}
+		}
+	}
+	
+	// Populate $_FILES
+	if len(i.httpContext.Files) > 0 {
+		files := i.env.Global().GetArray("_FILES")
+		for filename, content := range i.httpContext.Files {
+			fileInfo := runtime.NewArray()
+			fileInfo.Set(runtime.NewString("name"), runtime.NewString(filename))
+			fileInfo.Set(runtime.NewString("type"), runtime.NewString("application/octet-stream"))
+			fileInfo.Set(runtime.NewString("tmp_name"), runtime.NewString("/tmp/" + filename))
+			fileInfo.Set(runtime.NewString("error"), runtime.NewInt(0))
+			fileInfo.Set(runtime.NewString("size"), runtime.NewInt(int64(len(content))))
+			files.Set(runtime.NewString(filename), fileInfo)
+		}
+	}
 }
 
 // Eval parses and executes PHP code.

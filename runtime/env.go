@@ -142,6 +142,19 @@ func (e *Environment) GetFunction(name string) (*Function, bool) {
 	return fn, ok
 }
 
+// GetArray retrieves an array variable by name.
+func (e *Environment) GetArray(name string) *Array {
+	if val, ok := e.Get(name); ok {
+		if arr, isArr := val.(*Array); isArr {
+			return arr
+		}
+	}
+	// Create a new array if it doesn't exist
+	arr := NewArray()
+	e.Set(name, arr)
+	return arr
+}
+
 // ----------------------------------------------------------------------------
 // Classes
 
