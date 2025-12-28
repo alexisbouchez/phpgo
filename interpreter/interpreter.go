@@ -17,6 +17,7 @@ import (
 type Interpreter struct {
 	env              *runtime.Environment
 	output           strings.Builder
+	outputBuffers    []*strings.Builder // Stack of output buffers for ob_*
 	staticVars       *runtime.StaticVars
 	currentClass     string          // Current class context for self/parent/static
 	currentThis      *runtime.Object // Current object for method calls
@@ -56,6 +57,24 @@ func (i *Interpreter) Eval(input string) runtime.Value {
 // Output returns the captured output.
 func (i *Interpreter) Output() string {
 	return i.output.String()
+}
+
+// writeOutput writes to the current output buffer or main output
+func (i *Interpreter) writeOutput(s string) {
+	if len(i.outputBuffers) > 0 {
+		i.outputBuffers[len(i.outputBuffers)-1].WriteString(s)
+	} else {
+		i.output.WriteString(s)
+	}
+}
+
+// flushToOutput writes to the output at the previous buffer level (or main output)
+func (i *Interpreter) flushToOutput(s string) {
+	if len(i.outputBuffers) > 1 {
+		i.outputBuffers[len(i.outputBuffers)-2].WriteString(s)
+	} else {
+		i.output.WriteString(s)
+	}
 }
 
 func (i *Interpreter) evalFile(file *ast.File) runtime.Value {
@@ -205,7 +224,7 @@ func (i *Interpreter) evalBlock(block *ast.BlockStmt) runtime.Value {
 func (i *Interpreter) evalEcho(s *ast.EchoStmt) runtime.Value {
 	for _, expr := range s.Exprs {
 		val := i.evalExpr(expr)
-		i.output.WriteString(val.ToString())
+		i.writeOutput(val.ToString())
 	}
 	return runtime.NULL
 }
@@ -580,7 +599,7 @@ func (i *Interpreter) evalExpr(expr ast.Expr) runtime.Value {
 		return i.evalIncDec(e)
 	case *ast.PrintExpr:
 		val := i.evalExpr(e.Expr)
-		i.output.WriteString(val.ToString())
+		i.writeOutput(val.ToString())
 		return runtime.NewInt(1)
 	case *ast.ErrorSuppressExpr:
 		// Suppress errors and evaluate
@@ -2131,7 +2150,7 @@ func (i *Interpreter) evalExit(e *ast.ExitExpr) runtime.Value {
 		case *runtime.Int:
 			exit.Status = int(v.Value)
 		case *runtime.String:
-			i.output.WriteString(v.Value)
+			i.writeOutput(v.Value)
 			exit.Message = v.Value
 		default:
 			exit.Status = int(val.ToInt())

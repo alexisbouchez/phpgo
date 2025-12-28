@@ -4,6 +4,5 @@ MEDIUM PRIORITY
 
 LOWER PRIORITY
 - Reflection API
-- Output buffering (ob_*)
 - Proper type enforcement (strict_types)
 - Attributes

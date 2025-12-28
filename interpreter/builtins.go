@@ -252,6 +252,26 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "print_r":
 		return i.builtinPrintR
 
+	// Output buffering functions
+	case "ob_start":
+		return i.builtinObStart
+	case "ob_end_clean":
+		return i.builtinObEndClean
+	case "ob_end_flush":
+		return i.builtinObEndFlush
+	case "ob_get_contents":
+		return i.builtinObGetContents
+	case "ob_get_clean":
+		return i.builtinObGetClean
+	case "ob_get_flush":
+		return i.builtinObGetFlush
+	case "ob_get_level":
+		return i.builtinObGetLevel
+	case "ob_flush":
+		return i.builtinObFlush
+	case "ob_clean":
+		return i.builtinObClean
+
 	// Misc functions
 	case "defined":
 		return i.builtinDefined
@@ -1635,8 +1655,8 @@ func builtinBoolval(args ...runtime.Value) runtime.Value {
 
 func (i *Interpreter) builtinVarDump(args ...runtime.Value) runtime.Value {
 	for _, arg := range args {
-		i.output.WriteString(i.inspectValue(arg))
-		i.output.WriteString("\n")
+		i.writeOutput(i.inspectValue(arg))
+		i.writeOutput("\n")
 	}
 	return runtime.NULL
 }
@@ -1654,7 +1674,7 @@ func (i *Interpreter) builtinPrintR(args ...runtime.Value) runtime.Value {
 	if returnOutput {
 		return runtime.NewString(output)
 	}
-	i.output.WriteString(output)
+	i.writeOutput(output)
 	return runtime.TRUE
 }
 
@@ -1688,6 +1708,80 @@ func (i *Interpreter) formatDebugInfo(className string, arr *runtime.Array) stri
 	}
 	sb.WriteString("}")
 	return sb.String()
+}
+
+// ----------------------------------------------------------------------------
+// Output buffering functions
+
+func (i *Interpreter) builtinObStart(args ...runtime.Value) runtime.Value {
+	i.outputBuffers = append(i.outputBuffers, &strings.Builder{})
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinObEndClean(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	i.outputBuffers = i.outputBuffers[:len(i.outputBuffers)-1]
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinObEndFlush(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	content := i.outputBuffers[len(i.outputBuffers)-1].String()
+	i.outputBuffers = i.outputBuffers[:len(i.outputBuffers)-1]
+	i.flushToOutput(content)
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinObGetContents(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	return runtime.NewString(i.outputBuffers[len(i.outputBuffers)-1].String())
+}
+
+func (i *Interpreter) builtinObGetClean(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	content := i.outputBuffers[len(i.outputBuffers)-1].String()
+	i.outputBuffers = i.outputBuffers[:len(i.outputBuffers)-1]
+	return runtime.NewString(content)
+}
+
+func (i *Interpreter) builtinObGetFlush(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	content := i.outputBuffers[len(i.outputBuffers)-1].String()
+	i.outputBuffers = i.outputBuffers[:len(i.outputBuffers)-1]
+	i.flushToOutput(content)
+	return runtime.NewString(content)
+}
+
+func (i *Interpreter) builtinObGetLevel(args ...runtime.Value) runtime.Value {
+	return runtime.NewInt(int64(len(i.outputBuffers)))
+}
+
+func (i *Interpreter) builtinObFlush(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	content := i.outputBuffers[len(i.outputBuffers)-1].String()
+	i.outputBuffers[len(i.outputBuffers)-1].Reset()
+	i.flushToOutput(content)
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinObClean(args ...runtime.Value) runtime.Value {
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+	i.outputBuffers[len(i.outputBuffers)-1].Reset()
+	return runtime.TRUE
 }
 
 // ----------------------------------------------------------------------------

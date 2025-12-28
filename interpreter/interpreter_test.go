@@ -2922,3 +2922,119 @@ func TestDebugInfoVarDump(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// Output buffering tests
+
+func TestObStartAndGetClean(t *testing.T) {
+	input := `<?php
+	ob_start();
+	echo "buffered";
+	$content = ob_get_clean();
+	echo "direct:" . $content;
+	`
+	expected := "direct:buffered"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestObGetContents(t *testing.T) {
+	input := `<?php
+	ob_start();
+	echo "hello";
+	$content = ob_get_contents();
+	echo " world";
+	ob_end_clean();
+	echo $content;
+	`
+	expected := "hello"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestObEndFlush(t *testing.T) {
+	input := `<?php
+	ob_start();
+	echo "flushed";
+	ob_end_flush();
+	echo "-done";
+	`
+	expected := "flushed-done"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestObGetLevel(t *testing.T) {
+	input := `<?php
+	$levels = [];
+	$levels[] = ob_get_level();
+	ob_start();
+	$levels[] = ob_get_level();
+	ob_start();
+	$levels[] = ob_get_level();
+	ob_end_clean();
+	$levels[] = ob_get_level();
+	ob_end_clean();
+	$levels[] = ob_get_level();
+	echo implode(',', $levels);
+	`
+	expected := "0,1,2,1,0"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestObNested(t *testing.T) {
+	input := `<?php
+	ob_start();
+	echo "outer";
+	ob_start();
+	echo "inner";
+	$inner = ob_get_clean();
+	echo "-" . $inner;
+	$outer = ob_get_clean();
+	echo $outer;
+	`
+	expected := "outer-inner"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestObClean(t *testing.T) {
+	input := `<?php
+	ob_start();
+	echo "discard";
+	ob_clean();
+	echo "keep";
+	$content = ob_get_clean();
+	echo $content;
+	`
+	expected := "keep"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestObFlush(t *testing.T) {
+	input := `<?php
+	ob_start();
+	echo "first";
+	ob_flush();
+	echo "second";
+	ob_end_clean();
+	`
+	expected := "first"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
