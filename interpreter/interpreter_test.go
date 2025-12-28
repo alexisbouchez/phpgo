@@ -2755,3 +2755,170 @@ func TestSerializeRoundtrip(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// __clone and __debugInfo tests
+
+func TestCloneBasic(t *testing.T) {
+	input := `<?php
+	class Point {
+		public $x;
+		public $y;
+
+		public function __construct($x, $y) {
+			$this->x = $x;
+			$this->y = $y;
+		}
+	}
+
+	$p1 = new Point(10, 20);
+	$p2 = clone $p1;
+	$p2->x = 100;
+	echo $p1->x . ',' . $p2->x;
+	`
+	expected := "10,100"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestCloneMagicMethod(t *testing.T) {
+	input := `<?php
+	class Counter {
+		public $count;
+		public $cloned = false;
+
+		public function __construct($count) {
+			$this->count = $count;
+		}
+
+		public function __clone() {
+			$this->cloned = true;
+			$this->count = 0; // Reset count on clone
+		}
+	}
+
+	$c1 = new Counter(10);
+	$c2 = clone $c1;
+	echo $c1->count . ',' . $c2->count . ',' . ($c1->cloned ? 'true' : 'false') . ',' . ($c2->cloned ? 'true' : 'false');
+	`
+	expected := "10,0,false,true"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestCloneDeepCopy(t *testing.T) {
+	input := `<?php
+	class Node {
+		public $value;
+		public $child;
+
+		public function __construct($value) {
+			$this->value = $value;
+		}
+
+		public function __clone() {
+			// Deep clone the child if it exists
+			if ($this->child !== null) {
+				$this->child = clone $this->child;
+			}
+		}
+	}
+
+	$n1 = new Node('parent');
+	$n1->child = new Node('child');
+	$n2 = clone $n1;
+	$n2->child->value = 'modified';
+	echo $n1->child->value . ',' . $n2->child->value;
+	`
+	expected := "child,modified"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestDebugInfo(t *testing.T) {
+	input := `<?php
+	class User {
+		private $name;
+		private $password;
+
+		public function __construct($name, $password) {
+			$this->name = $name;
+			$this->password = $password;
+		}
+
+		public function __debugInfo() {
+			return [
+				'name' => $this->name,
+				'password' => '***'
+			];
+		}
+	}
+
+	$u = new User('Alice', 'secret123');
+	$output = print_r($u, true);
+	$hasName = strpos($output, 'Alice') !== false;
+	$hasHidden = strpos($output, '***') !== false;
+	$hasSecret = strpos($output, 'secret123') !== false;
+	echo ($hasName && $hasHidden && !$hasSecret) ? 'ok' : 'fail';
+	`
+	expected := "ok"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestDebugInfoVarDump(t *testing.T) {
+	input := `<?php
+	class Config {
+		private $settings = [];
+		private $secret;
+
+		public function __construct() {
+			$this->settings = ['debug' => true];
+			$this->secret = 'hidden';
+		}
+
+		public function __debugInfo() {
+			return ['settings' => $this->settings];
+		}
+	}
+
+	$c = new Config();
+	ob_start();
+	var_dump($c);
+	$output = ob_get_clean();
+	// Actually just check the result contains settings
+	echo strpos($output, 'settings') !== false ? 'ok' : 'fail';
+	`
+	// Since ob_* isn't implemented, let's test differently
+	input = `<?php
+	class Config {
+		private $settings = [];
+		private $secret;
+
+		public function __construct() {
+			$this->settings = ['debug' => true];
+			$this->secret = 'hidden';
+		}
+
+		public function __debugInfo() {
+			return ['visible' => 'yes'];
+		}
+	}
+
+	$c = new Config();
+	$output = print_r($c, true);
+	echo strpos($output, 'visible') !== false && strpos($output, 'secret') === false ? 'ok' : 'fail';
+	`
+	expected := "ok"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

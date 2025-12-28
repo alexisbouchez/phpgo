@@ -1635,7 +1635,7 @@ func builtinBoolval(args ...runtime.Value) runtime.Value {
 
 func (i *Interpreter) builtinVarDump(args ...runtime.Value) runtime.Value {
 	for _, arg := range args {
-		i.output.WriteString(arg.Inspect())
+		i.output.WriteString(i.inspectValue(arg))
 		i.output.WriteString("\n")
 	}
 	return runtime.NULL
@@ -1650,12 +1650,44 @@ func (i *Interpreter) builtinPrintR(args ...runtime.Value) runtime.Value {
 		returnOutput = args[1].ToBool()
 	}
 
-	output := args[0].Inspect()
+	output := i.inspectValue(args[0])
 	if returnOutput {
 		return runtime.NewString(output)
 	}
 	i.output.WriteString(output)
 	return runtime.TRUE
+}
+
+// inspectValue returns a string representation, using __debugInfo for objects if available
+func (i *Interpreter) inspectValue(v runtime.Value) string {
+	if obj, ok := v.(*runtime.Object); ok {
+		// Check for __debugInfo magic method
+		if debugInfoMethod, _ := i.findMethod(obj.Class, "__debugInfo"); debugInfoMethod != nil {
+			result := i.callArrayAccessMethod(obj, "__debugInfo", []runtime.Value{})
+			if arr, ok := result.(*runtime.Array); ok {
+				return i.formatDebugInfo(obj.Class.Name, arr)
+			}
+		}
+	}
+	return v.Inspect()
+}
+
+func (i *Interpreter) formatDebugInfo(className string, arr *runtime.Array) string {
+	var sb strings.Builder
+	sb.WriteString("object(")
+	sb.WriteString(className)
+	sb.WriteString(")#1 (")
+	sb.WriteString(strconv.Itoa(arr.Len()))
+	sb.WriteString(") {\n")
+	for _, key := range arr.Keys {
+		sb.WriteString("  [\"")
+		sb.WriteString(key.ToString())
+		sb.WriteString("\"] => ")
+		sb.WriteString(arr.Elements[key].Inspect())
+		sb.WriteString("\n")
+	}
+	sb.WriteString("}")
+	return sb.String()
 }
 
 // ----------------------------------------------------------------------------

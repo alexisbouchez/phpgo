@@ -1979,6 +1979,10 @@ func (i *Interpreter) evalClone(e *ast.CloneExpr) runtime.Value {
 		if _, hasToString := objVal.Class.Methods["__toString"]; hasToString {
 			clone.SetToStringCallback(i.createToStringCallback())
 		}
+		// Call __clone if it exists
+		if cloneMethod, _ := i.findMethod(objVal.Class, "__clone"); cloneMethod != nil {
+			i.callArrayAccessMethod(clone, "__clone", []runtime.Value{})
+		}
 		return clone
 	}
 	return runtime.NULL

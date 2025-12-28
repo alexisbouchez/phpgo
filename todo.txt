@@ -4,7 +4,6 @@ MEDIUM PRIORITY
 
 LOWER PRIORITY
 - Reflection API
-- More magic methods (__clone, __debugInfo)
 - Output buffering (ob_*)
 - Proper type enforcement (strict_types)
 - Attributes
