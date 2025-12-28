@@ -454,6 +454,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinArrayCombine
 	case "array_fill":
 		return builtinArrayFill
+	case "array_fill_keys":
+		return builtinArrayFillKeys
+	case "array_replace":
+		return builtinArrayReplace
 	case "array_chunk":
 		return builtinArrayChunk
 	case "array_column":
@@ -4299,6 +4303,49 @@ func builtinArrayFill(args ...runtime.Value) runtime.Value {
 	for i := int64(0); i < num; i++ {
 		result.Set(runtime.NewInt(startIndex+i), value)
 	}
+	return result
+}
+
+func builtinArrayFillKeys(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	keys, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	value := args[1]
+
+	result := runtime.NewArray()
+	for _, key := range keys.Keys {
+		keyVal := keys.Elements[key]
+		result.Set(keyVal, value)
+	}
+	return result
+}
+
+func builtinArrayReplace(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewArray()
+	}
+
+	// Start with first array
+	result := runtime.NewArray()
+	if arr, ok := args[0].(*runtime.Array); ok {
+		for _, key := range arr.Keys {
+			result.Set(key, arr.Elements[key])
+		}
+	}
+
+	// Replace values from subsequent arrays
+	for i := 1; i < len(args); i++ {
+		if arr, ok := args[i].(*runtime.Array); ok {
+			for _, key := range arr.Keys {
+				result.Set(key, arr.Elements[key])
+			}
+		}
+	}
+
 	return result
 }
 
