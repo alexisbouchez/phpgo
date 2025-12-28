@@ -156,6 +156,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinStrShuffle
 	case "str_getcsv":
 		return builtinStrGetcsv
+	case "str_rot13":
+		return builtinStrRot13
 	case "ord":
 		return builtinOrd
 	case "chr":
@@ -208,6 +210,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinSort
 	case "rsort":
 		return builtinRsort
+	case "natsort":
+		return builtinNatsort
+	case "natcasesort":
+		return builtinNatcasesort
 
 	// Math functions
 	case "abs":
@@ -230,6 +236,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinRand
 	case "mt_rand":
 		return builtinMtRand
+	case "lcg_value":
+		return builtinLcgValue
 
 	// Type functions
 	case "gettype":
@@ -1184,6 +1192,27 @@ func builtinStrGetcsv(args ...runtime.Value) runtime.Value {
 	return result
 }
 
+func builtinStrRot13(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	result := make([]rune, len(str))
+
+	for i, ch := range str {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+			result[i] = 'a' + (ch-'a'+13)%26
+		case ch >= 'A' && ch <= 'Z':
+			result[i] = 'A' + (ch-'A'+13)%26
+		default:
+			result[i] = ch
+		}
+	}
+
+	return runtime.NewString(string(result))
+}
+
 func builtinOrd(args ...runtime.Value) runtime.Value {
 	if len(args) < 1 || len(args[0].ToString()) == 0 {
 		return runtime.NewInt(0)
@@ -1792,6 +1821,112 @@ func builtinRsort(args ...runtime.Value) runtime.Value {
 	return runtime.TRUE
 }
 
+func builtinNatsort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Create slice of key-value pairs
+	type kv struct {
+		key runtime.Value
+		val runtime.Value
+	}
+	pairs := make([]kv, 0, len(arr.Keys))
+	for _, key := range arr.Keys {
+		pairs = append(pairs, kv{key, arr.Elements[key]})
+	}
+
+	// Natural sort by value
+	sort.Slice(pairs, func(i, j int) bool {
+		return naturalCompare(pairs[i].val.ToString(), pairs[j].val.ToString(), false) < 0
+	})
+
+	// Rebuild array maintaining original keys
+	arr.Keys = make([]runtime.Value, len(pairs))
+	arr.Elements = make(map[runtime.Value]runtime.Value)
+	for i, p := range pairs {
+		arr.Keys[i] = p.key
+		arr.Elements[p.key] = p.val
+	}
+
+	return runtime.TRUE
+}
+
+func builtinNatcasesort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Create slice of key-value pairs
+	type kv struct {
+		key runtime.Value
+		val runtime.Value
+	}
+	pairs := make([]kv, 0, len(arr.Keys))
+	for _, key := range arr.Keys {
+		pairs = append(pairs, kv{key, arr.Elements[key]})
+	}
+
+	// Natural sort by value (case-insensitive)
+	sort.Slice(pairs, func(i, j int) bool {
+		return naturalCompare(pairs[i].val.ToString(), pairs[j].val.ToString(), true) < 0
+	})
+
+	// Rebuild array maintaining original keys
+	arr.Keys = make([]runtime.Value, len(pairs))
+	arr.Elements = make(map[runtime.Value]runtime.Value)
+	for i, p := range pairs {
+		arr.Keys[i] = p.key
+		arr.Elements[p.key] = p.val
+	}
+
+	return runtime.TRUE
+}
+
+func naturalCompare(a, b string, caseInsensitive bool) int {
+	if caseInsensitive {
+		a = strings.ToLower(a)
+		b = strings.ToLower(b)
+	}
+
+	ia, ib := 0, 0
+	for ia < len(a) && ib < len(b) {
+		// Check if both are at digit positions
+		if a[ia] >= '0' && a[ia] <= '9' && b[ib] >= '0' && b[ib] <= '9' {
+			// Extract numbers
+			numA, numB := 0, 0
+			for ia < len(a) && a[ia] >= '0' && a[ia] <= '9' {
+				numA = numA*10 + int(a[ia]-'0')
+				ia++
+			}
+			for ib < len(b) && b[ib] >= '0' && b[ib] <= '9' {
+				numB = numB*10 + int(b[ib]-'0')
+				ib++
+			}
+			if numA != numB {
+				return numA - numB
+			}
+		} else {
+			// Regular character comparison
+			if a[ia] != b[ib] {
+				return int(a[ia]) - int(b[ib])
+			}
+			ia++
+			ib++
+		}
+	}
+
+	return len(a) - len(b)
+}
+
 // ----------------------------------------------------------------------------
 // Math functions
 
@@ -1920,6 +2055,19 @@ func builtinRand(args ...runtime.Value) runtime.Value {
 
 func builtinMtRand(args ...runtime.Value) runtime.Value {
 	return builtinRand(args...)
+}
+
+func builtinLcgValue(args ...runtime.Value) runtime.Value {
+	// Linear Congruential Generator - returns a pseudo random number between 0 and 1
+	// Using time-based seed for randomness
+	seed := uint64(time.Now().UnixNano())
+	// LCG parameters (from Numerical Recipes)
+	const a uint64 = 1664525
+	const c uint64 = 1013904223
+	const m uint64 = 1 << 32
+
+	value := float64((a*seed+c)%m) / float64(m)
+	return runtime.NewFloat(value)
 }
 
 // ----------------------------------------------------------------------------
