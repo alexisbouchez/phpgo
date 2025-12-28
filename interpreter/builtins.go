@@ -530,6 +530,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinArraySplice
 	case "array_multisort":
 		return builtinArrayMultisort
+	case "array_change_key_case":
+		return builtinArrayChangeKeyCase
 
 	// File stream functions
 	case "fopen":
@@ -5334,6 +5336,42 @@ func builtinArrayMultisort(args ...runtime.Value) runtime.Value {
 	arr.NextIndex = int64(len(pairs))
 
 	return runtime.TRUE
+}
+
+func builtinArrayChangeKeyCase(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewArray()
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	// Default to CASE_LOWER (0)
+	caseType := int64(0)
+	if len(args) >= 2 {
+		caseType = args[1].ToInt()
+	}
+
+	result := runtime.NewArray()
+
+	for _, key := range arr.Keys {
+		value := arr.Elements[key]
+		keyStr := key.ToString()
+
+		// Change case based on type
+		var newKeyStr string
+		if caseType == 1 { // CASE_UPPER
+			newKeyStr = strings.ToUpper(keyStr)
+		} else { // CASE_LOWER (0)
+			newKeyStr = strings.ToLower(keyStr)
+		}
+
+		result.Set(runtime.NewString(newKeyStr), value)
+	}
+
+	return result
 }
 
 // ----------------------------------------------------------------------------
