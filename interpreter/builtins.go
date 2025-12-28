@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/base64"
@@ -458,6 +459,20 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "parse_ini_string":
 		return builtinParseIniString
 
+	// Session functions
+	case "session_start":
+		return i.builtinSessionStart
+	case "session_destroy":
+		return i.builtinSessionDestroy
+	case "session_id":
+		return i.builtinSessionId
+	case "session_name":
+		return i.builtinSessionName
+	case "session_regenerate_id":
+		return i.builtinSessionRegenerateId
+	case "session_write_close", "session_commit":
+		return i.builtinSessionWriteClose
+
 	// Date/time functions
 	case "time":
 		return builtinTime
@@ -627,6 +642,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinParseUrl
 	case "http_build_query":
 		return builtinHttpBuildQuery
+	case "header":
+		return i.builtinHeader
+	case "headers_sent":
+		return i.builtinHeadersSent
+	case "headers_list":
+		return i.builtinHeadersList
+	case "header_remove":
+		return i.builtinHeaderRemove
+	case "http_response_code":
+		return i.builtinHttpResponseCode
 	case "urlencode":
 		return builtinUrlencode
 	case "urldecode":
@@ -743,6 +768,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinRename
 	case "chmod":
 		return builtinChmod
+	case "chown":
+		return builtinChown
+	case "chgrp":
+		return builtinChgrp
 	case "touch":
 		return builtinTouch
 	case "sys_get_temp_dir":
@@ -8006,6 +8035,40 @@ func builtinChmod(args ...runtime.Value) runtime.Value {
 	return runtime.TRUE
 }
 
+func builtinChown(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	uid := int(args[1].ToInt())
+
+	// Keep current group (-1 means don't change)
+	err := os.Chown(filename, uid, -1)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
+func builtinChgrp(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	gid := int(args[1].ToInt())
+
+	// Keep current owner (-1 means don't change)
+	err := os.Chown(filename, -1, gid)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
 func builtinTouch(args ...runtime.Value) runtime.Value {
 	if len(args) < 1 {
 		return runtime.FALSE
@@ -8520,4 +8583,197 @@ func builtinInetNtop(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+// HTTP Header functions
+
+func (i *Interpreter) builtinHeader(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	header := args[0].ToString()
+
+	// Check if headers already sent
+	if i.httpContext.HeadersSent {
+		// In PHP, this would trigger a warning
+		return runtime.NULL
+	}
+
+	// Check replace flag (default true)
+	replace := true
+	if len(args) >= 2 {
+		replace = args[1].ToBool()
+	}
+
+	// Check response code
+	if len(args) >= 3 {
+		code := args[2].ToInt()
+		if code > 0 {
+			i.httpContext.ResponseCode = int(code)
+		}
+	}
+
+	// Handle special Location header (sets 302 by default)
+	if strings.HasPrefix(strings.ToLower(header), "location:") && i.httpContext.ResponseCode == 200 {
+		i.httpContext.ResponseCode = 302
+	}
+
+	// Handle HTTP/ status line
+	if strings.HasPrefix(header, "HTTP/") {
+		parts := strings.SplitN(header, " ", 3)
+		if len(parts) >= 2 {
+			if code, err := strconv.Atoi(parts[1]); err == nil {
+				i.httpContext.ResponseCode = code
+			}
+		}
+		return runtime.NULL
+	}
+
+	// If replace is true, remove existing headers with same name
+	if replace {
+		headerName := strings.ToLower(strings.SplitN(header, ":", 2)[0])
+		newHeaders := make([]string, 0, len(i.httpContext.ResponseHeaders))
+		for _, h := range i.httpContext.ResponseHeaders {
+			existingName := strings.ToLower(strings.SplitN(h, ":", 2)[0])
+			if existingName != headerName {
+				newHeaders = append(newHeaders, h)
+			}
+		}
+		i.httpContext.ResponseHeaders = newHeaders
+	}
+
+	i.httpContext.ResponseHeaders = append(i.httpContext.ResponseHeaders, header)
+	return runtime.NULL
+}
+
+func (i *Interpreter) builtinHeadersSent(args ...runtime.Value) runtime.Value {
+	return runtime.NewBool(i.httpContext.HeadersSent)
+}
+
+func (i *Interpreter) builtinHeadersList(args ...runtime.Value) runtime.Value {
+	arr := runtime.NewArray()
+	for idx, header := range i.httpContext.ResponseHeaders {
+		arr.Set(runtime.NewInt(int64(idx)), runtime.NewString(header))
+	}
+	return arr
+}
+
+func (i *Interpreter) builtinHeaderRemove(args ...runtime.Value) runtime.Value {
+	if i.httpContext.HeadersSent {
+		return runtime.NULL
+	}
+
+	if len(args) == 0 {
+		// Remove all headers
+		i.httpContext.ResponseHeaders = make([]string, 0)
+		return runtime.NULL
+	}
+
+	headerName := strings.ToLower(args[0].ToString())
+	newHeaders := make([]string, 0, len(i.httpContext.ResponseHeaders))
+	for _, h := range i.httpContext.ResponseHeaders {
+		existingName := strings.ToLower(strings.SplitN(h, ":", 2)[0])
+		if existingName != headerName {
+			newHeaders = append(newHeaders, h)
+		}
+	}
+	i.httpContext.ResponseHeaders = newHeaders
+	return runtime.NULL
+}
+
+func (i *Interpreter) builtinHttpResponseCode(args ...runtime.Value) runtime.Value {
+	if len(args) == 0 {
+		// Get current response code
+		if i.httpContext.ResponseCode == 0 {
+			return runtime.FALSE
+		}
+		return runtime.NewInt(int64(i.httpContext.ResponseCode))
+	}
+
+	// Set response code
+	code := args[0].ToInt()
+	if code >= 100 && code <= 599 {
+		i.httpContext.ResponseCode = int(code)
+		return runtime.NewInt(code)
+	}
+
+	return runtime.FALSE
+}
+
+// Session functions
+
+func (i *Interpreter) generateSessionId() string {
+	bytes := make([]byte, 16)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
+}
+
+func (i *Interpreter) builtinSessionStart(args ...runtime.Value) runtime.Value {
+	if i.httpContext.SessionStarted {
+		return runtime.TRUE
+	}
+
+	// Generate session ID if not set
+	if i.httpContext.SessionID == "" {
+		i.httpContext.SessionID = i.generateSessionId()
+	}
+
+	i.httpContext.SessionStarted = true
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinSessionDestroy(args ...runtime.Value) runtime.Value {
+	if !i.httpContext.SessionStarted {
+		return runtime.FALSE
+	}
+
+	// Clear session data
+	session := runtime.NewArray()
+	i.env.SetGlobal("_SESSION", session)
+
+	i.httpContext.SessionStarted = false
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinSessionId(args ...runtime.Value) runtime.Value {
+	if len(args) == 0 {
+		// Get session ID
+		return runtime.NewString(i.httpContext.SessionID)
+	}
+
+	// Set session ID (only works before session_start)
+	if !i.httpContext.SessionStarted {
+		i.httpContext.SessionID = args[0].ToString()
+	}
+	return runtime.NewString(i.httpContext.SessionID)
+}
+
+var sessionName = "PHPSESSID"
+
+func (i *Interpreter) builtinSessionName(args ...runtime.Value) runtime.Value {
+	oldName := sessionName
+	if len(args) > 0 {
+		sessionName = args[0].ToString()
+	}
+	return runtime.NewString(oldName)
+}
+
+func (i *Interpreter) builtinSessionRegenerateId(args ...runtime.Value) runtime.Value {
+	if !i.httpContext.SessionStarted {
+		return runtime.FALSE
+	}
+
+	// Generate new session ID
+	i.httpContext.SessionID = i.generateSessionId()
+
+	// Optional: delete old session (first arg)
+	// In this implementation, we just regenerate the ID
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinSessionWriteClose(args ...runtime.Value) runtime.Value {
+	// In this implementation, sessions are in-memory, so this is a no-op
+	// In a real implementation, this would write session data to storage
+	return runtime.NULL
 }
