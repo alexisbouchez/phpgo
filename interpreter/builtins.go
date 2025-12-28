@@ -132,8 +132,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinImplode
 	case "sprintf":
 		return builtinSprintf
+	case "vprintf":
+		return i.builtinVprintf
 	case "str_repeat":
 		return builtinStrRepeat
+	case "substr_replace":
+		return builtinSubstrReplace
+	case "count_chars":
+		return builtinCountChars
+	case "sscanf":
+		return builtinSscanf
 	case "ucfirst":
 		return builtinUcfirst
 	case "lcfirst":
@@ -880,6 +888,195 @@ func builtinSprintf(args ...runtime.Value) runtime.Value {
 		}
 	}
 	return runtime.NewString(fmt.Sprintf(format, fmtArgs...))
+}
+
+func (i *Interpreter) builtinVprintf(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+	format := args[0].ToString()
+	argsArray, ok := args[1].(*runtime.Array)
+	if !ok {
+		return runtime.NewInt(0)
+	}
+
+	// Convert array to interface slice
+	fmtArgs := make([]interface{}, 0, len(argsArray.Keys))
+	for _, key := range argsArray.Keys {
+		val := argsArray.Elements[key]
+		switch v := val.(type) {
+		case *runtime.Int:
+			fmtArgs = append(fmtArgs, v.Value)
+		case *runtime.Float:
+			fmtArgs = append(fmtArgs, v.Value)
+		case *runtime.String:
+			fmtArgs = append(fmtArgs, v.Value)
+		default:
+			fmtArgs = append(fmtArgs, val.ToString())
+		}
+	}
+
+	output := fmt.Sprintf(format, fmtArgs...)
+	i.writeOutput(output)
+	return runtime.NewInt(int64(len(output)))
+}
+
+func builtinSubstrReplace(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	replacement := args[1].ToString()
+	start := int(args[2].ToInt())
+
+	length := len(str) - start
+	if len(args) >= 4 {
+		length = int(args[3].ToInt())
+	}
+
+	// Handle negative start
+	if start < 0 {
+		start = len(str) + start
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	// Handle out of bounds start
+	if start > len(str) {
+		return runtime.NewString(str)
+	}
+
+	// Calculate end position
+	end := start + length
+	if length < 0 {
+		end = len(str) + length
+	}
+	if end > len(str) {
+		end = len(str)
+	}
+	if end < start {
+		end = start
+	}
+
+	result := str[:start] + replacement + str[end:]
+	return runtime.NewString(result)
+}
+
+func builtinCountChars(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewArray()
+	}
+	str := args[0].ToString()
+	mode := int64(0)
+	if len(args) >= 2 {
+		mode = args[1].ToInt()
+	}
+
+	counts := make(map[byte]int)
+	for i := 0; i < len(str); i++ {
+		counts[str[i]]++
+	}
+
+	result := runtime.NewArray()
+	switch mode {
+	case 0: // All bytes with count
+		for i := 0; i < 256; i++ {
+			result.Set(runtime.NewInt(int64(i)), runtime.NewInt(int64(counts[byte(i)])))
+		}
+	case 1: // Only bytes with count > 0
+		for i := 0; i < 256; i++ {
+			if counts[byte(i)] > 0 {
+				result.Set(runtime.NewInt(int64(i)), runtime.NewInt(int64(counts[byte(i)])))
+			}
+		}
+	case 2: // Only bytes with count == 0
+		for i := 0; i < 256; i++ {
+			if counts[byte(i)] == 0 {
+				result.Set(runtime.NewInt(int64(i)), runtime.NewInt(int64(counts[byte(i)])))
+			}
+		}
+	case 3: // All unique characters as string
+		var chars []byte
+		for i := 0; i < 256; i++ {
+			if counts[byte(i)] > 0 {
+				chars = append(chars, byte(i))
+			}
+		}
+		return runtime.NewString(string(chars))
+	case 4: // All unused characters as string
+		var chars []byte
+		for i := 0; i < 256; i++ {
+			if counts[byte(i)] == 0 {
+				chars = append(chars, byte(i))
+			}
+		}
+		return runtime.NewString(string(chars))
+	}
+
+	return result
+}
+
+func builtinSscanf(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	str := args[0].ToString()
+	format := args[1].ToString()
+
+	// Simple implementation - parse basic format specifiers
+	// %d = integer, %s = string, %f = float
+	result := runtime.NewArray()
+
+	// Split format into parts
+	parts := strings.Split(format, "%")
+	strIdx := 0
+
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) == 0 {
+			continue
+		}
+
+		spec := parts[i][0]
+		// Skip to next non-whitespace in string
+		for strIdx < len(str) && (str[strIdx] == ' ' || str[strIdx] == '\t') {
+			strIdx++
+		}
+
+		switch spec {
+		case 'd': // Integer
+			numStr := ""
+			for strIdx < len(str) && str[strIdx] >= '0' && str[strIdx] <= '9' {
+				numStr += string(str[strIdx])
+				strIdx++
+			}
+			if numStr != "" {
+				val, _ := strconv.ParseInt(numStr, 10, 64)
+				result.Set(nil, runtime.NewInt(val))
+			}
+		case 's': // String (until whitespace)
+			token := ""
+			for strIdx < len(str) && str[strIdx] != ' ' && str[strIdx] != '\t' {
+				token += string(str[strIdx])
+				strIdx++
+			}
+			if token != "" {
+				result.Set(nil, runtime.NewString(token))
+			}
+		case 'f': // Float
+			numStr := ""
+			for strIdx < len(str) && (str[strIdx] >= '0' && str[strIdx] <= '9' || str[strIdx] == '.') {
+				numStr += string(str[strIdx])
+				strIdx++
+			}
+			if numStr != "" {
+				val, _ := strconv.ParseFloat(numStr, 64)
+				result.Set(nil, runtime.NewFloat(val))
+			}
+		}
+	}
+
+	return result
 }
 
 func builtinStrRepeat(args ...runtime.Value) runtime.Value {
