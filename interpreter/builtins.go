@@ -38,6 +38,168 @@ func (i *Interpreter) registerBuiltins() {
 	// Register built-in interfaces
 	i.registerArrayAccessInterface()
 	i.registerIteratorInterfaces()
+	// Register SPL exception classes
+	i.registerSPLExceptions()
+}
+
+func (i *Interpreter) registerSPLExceptions() {
+	// Base Exception class
+	exception := &runtime.Class{
+		Name:        "Exception",
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	exception.Properties["message"] = &runtime.PropertyDef{Name: "message", Default: runtime.NewString("")}
+	exception.Properties["code"] = &runtime.PropertyDef{Name: "code", Default: runtime.NewInt(0)}
+	exception.Properties["file"] = &runtime.PropertyDef{Name: "file", Default: runtime.NewString("")}
+	exception.Properties["line"] = &runtime.PropertyDef{Name: "line", Default: runtime.NewInt(0)}
+	i.env.DefineClass("Exception", exception)
+
+	// Logic exceptions
+	logicException := &runtime.Class{
+		Name:        "LogicException",
+		Parent:      exception,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("LogicException", logicException)
+
+	invalidArgumentException := &runtime.Class{
+		Name:        "InvalidArgumentException",
+		Parent:      logicException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("InvalidArgumentException", invalidArgumentException)
+
+	outOfRangeException := &runtime.Class{
+		Name:        "OutOfRangeException",
+		Parent:      logicException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("OutOfRangeException", outOfRangeException)
+
+	lengthException := &runtime.Class{
+		Name:        "LengthException",
+		Parent:      logicException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("LengthException", lengthException)
+
+	domainException := &runtime.Class{
+		Name:        "DomainException",
+		Parent:      logicException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("DomainException", domainException)
+
+	badFunctionCallException := &runtime.Class{
+		Name:        "BadFunctionCallException",
+		Parent:      logicException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("BadFunctionCallException", badFunctionCallException)
+
+	badMethodCallException := &runtime.Class{
+		Name:        "BadMethodCallException",
+		Parent:      badFunctionCallException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("BadMethodCallException", badMethodCallException)
+
+	// Runtime exceptions
+	runtimeException := &runtime.Class{
+		Name:        "RuntimeException",
+		Parent:      exception,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RuntimeException", runtimeException)
+
+	outOfBoundsException := &runtime.Class{
+		Name:        "OutOfBoundsException",
+		Parent:      runtimeException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("OutOfBoundsException", outOfBoundsException)
+
+	overflowException := &runtime.Class{
+		Name:        "OverflowException",
+		Parent:      runtimeException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("OverflowException", overflowException)
+
+	underflowException := &runtime.Class{
+		Name:        "UnderflowException",
+		Parent:      runtimeException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("UnderflowException", underflowException)
+
+	rangeException := &runtime.Class{
+		Name:        "RangeException",
+		Parent:      runtimeException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RangeException", rangeException)
+
+	unexpectedValueException := &runtime.Class{
+		Name:        "UnexpectedValueException",
+		Parent:      runtimeException,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("UnexpectedValueException", unexpectedValueException)
+
+	// Error exceptions (PHP 7+)
+	errorException := &runtime.Class{
+		Name:        "ErrorException",
+		Parent:      exception,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	errorException.Properties["severity"] = &runtime.PropertyDef{Name: "severity", Default: runtime.NewInt(1)}
+	i.env.DefineClass("ErrorException", errorException)
 }
 
 func (i *Interpreter) registerArrayAccessInterface() {

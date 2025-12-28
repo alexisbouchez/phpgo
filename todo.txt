@@ -91,7 +91,7 @@ HTTP Client (for WordPress HTTP API):
 Error Handling:
   [X] try/catch exception handling (exists, verify finally)
   [X] throw statement (exists)
-  [ ] Exception class hierarchy (base Exception exists, need subclasses)
+  [X] Exception class hierarchy (base Exception exists, need subclasses)
   [X] set_error_handler() / restore_error_handler()
   [X] set_exception_handler() / restore_exception_handler()
   [X] trigger_error() - trigger user errors
@@ -227,7 +227,7 @@ SPL (Standard PHP Library):
   [ ] SPL iterators (DirectoryIterator, RecursiveDirectoryIterator, etc.)
   [ ] SPL data structures (SplFixedArray, SplQueue, etc.)
   [X] spl_object_hash() / spl_object_id()
-  [ ] SPL exceptions (InvalidArgumentException, etc.)
+  [X] SPL exceptions (InvalidArgumentException, etc.)
 
 Output Control Enhancements:
   [ ] ob_start() callback parameter
