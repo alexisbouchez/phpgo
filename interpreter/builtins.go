@@ -245,6 +245,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinIsNumeric
 	case "is_callable":
 		return i.builtinIsCallable
+	case "filter_var":
+		return builtinFilterVar
 	case "intval":
 		return builtinIntval
 	case "floatval", "doubleval":
@@ -1853,6 +1855,97 @@ func (i *Interpreter) builtinIsCallable(args ...runtime.Value) runtime.Value {
 	// For now, keep it simple
 
 	return runtime.FALSE
+}
+
+func builtinFilterVar(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	value := args[0].ToString()
+	filterType := int64(516) // FILTER_DEFAULT
+
+	if len(args) >= 2 {
+		filterType = args[1].ToInt()
+	}
+
+	switch filterType {
+	case 257: // FILTER_VALIDATE_INT
+		val, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return runtime.FALSE
+		}
+		return runtime.NewInt(val)
+
+	case 259: // FILTER_VALIDATE_FLOAT
+		val, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return runtime.FALSE
+		}
+		return runtime.NewFloat(val)
+
+	case 273: // FILTER_VALIDATE_EMAIL
+		// Simple email validation
+		if strings.Contains(value, "@") && strings.Contains(value, ".") {
+			return runtime.NewString(value)
+		}
+		return runtime.FALSE
+
+	case 277: // FILTER_VALIDATE_URL
+		// Simple URL validation
+		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+			return runtime.NewString(value)
+		}
+		return runtime.FALSE
+
+	case 275: // FILTER_VALIDATE_IP
+		// Simple IP validation
+		parts := strings.Split(value, ".")
+		if len(parts) == 4 {
+			valid := true
+			for _, part := range parts {
+				num, err := strconv.Atoi(part)
+				if err != nil || num < 0 || num > 255 {
+					valid = false
+					break
+				}
+			}
+			if valid {
+				return runtime.NewString(value)
+			}
+		}
+		return runtime.FALSE
+
+	case 272: // FILTER_VALIDATE_BOOLEAN
+		lower := strings.ToLower(value)
+		if lower == "1" || lower == "true" || lower == "on" || lower == "yes" {
+			return runtime.TRUE
+		}
+		if lower == "0" || lower == "false" || lower == "off" || lower == "no" || lower == "" {
+			return runtime.FALSE
+		}
+		return runtime.NULL
+
+	case 513: // FILTER_SANITIZE_STRING
+		// Remove HTML tags
+		result := regexp.MustCompile(`<[^>]*>`).ReplaceAllString(value, "")
+		return runtime.NewString(result)
+
+	case 515: // FILTER_SANITIZE_EMAIL
+		// Keep only valid email characters
+		result := regexp.MustCompile(`[^a-zA-Z0-9@._+-]`).ReplaceAllString(value, "")
+		return runtime.NewString(result)
+
+	case 518: // FILTER_SANITIZE_NUMBER_INT
+		// Keep only digits and signs
+		result := regexp.MustCompile(`[^0-9+-]`).ReplaceAllString(value, "")
+		return runtime.NewString(result)
+
+	case 516: // FILTER_DEFAULT
+		fallthrough
+	default:
+		return runtime.NewString(value)
+	}
 }
 
 func builtinIntval(args ...runtime.Value) runtime.Value {
