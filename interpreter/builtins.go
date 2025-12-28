@@ -427,6 +427,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinStrftime
 	case "gmstrftime":
 		return builtinGmstrftime
+	case "gmdate":
+		return builtinGmdate
+	case "gmmktime":
+		return builtinGmmktime
+	case "getdate":
+		return builtinGetdate
+	case "checkdate":
+		return builtinCheckdate
+	case "idate":
+		return builtinIdate
 
 	// Hash functions
 	case "md5":
@@ -4410,6 +4420,186 @@ func formatStrftime(format string, t time.Time) string {
 		}
 	}
 	return result.String()
+}
+
+func builtinGmdate(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+
+	format := args[0].ToString()
+	var timestamp int64
+
+	if len(args) >= 2 {
+		timestamp = args[1].ToInt()
+	} else {
+		timestamp = time.Now().Unix()
+	}
+
+	t := time.Unix(timestamp, 0).UTC()
+	return runtime.NewString(convertPHPDateFormat(format, t))
+}
+
+func builtinGmmktime(args ...runtime.Value) runtime.Value {
+	// Get the arguments (hour, minute, second, month, day, year)
+	hour, minute, second := 0, 0, 0
+	month, day, year := 1, 1, 1970
+
+	if len(args) >= 1 {
+		hour = int(args[0].ToInt())
+	}
+	if len(args) >= 2 {
+		minute = int(args[1].ToInt())
+	}
+	if len(args) >= 3 {
+		second = int(args[2].ToInt())
+	}
+	if len(args) >= 4 {
+		month = int(args[3].ToInt())
+	}
+	if len(args) >= 5 {
+		day = int(args[4].ToInt())
+	}
+	if len(args) >= 6 {
+		year = int(args[5].ToInt())
+	}
+
+	t := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.UTC)
+	return runtime.NewInt(t.Unix())
+}
+
+func builtinGetdate(args ...runtime.Value) runtime.Value {
+	var timestamp int64
+	if len(args) >= 1 {
+		timestamp = args[0].ToInt()
+	} else {
+		timestamp = time.Now().Unix()
+	}
+
+	t := time.Unix(timestamp, 0)
+	result := runtime.NewArray()
+
+	result.Set(runtime.NewString("seconds"), runtime.NewInt(int64(t.Second())))
+	result.Set(runtime.NewString("minutes"), runtime.NewInt(int64(t.Minute())))
+	result.Set(runtime.NewString("hours"), runtime.NewInt(int64(t.Hour())))
+	result.Set(runtime.NewString("mday"), runtime.NewInt(int64(t.Day())))
+	result.Set(runtime.NewString("wday"), runtime.NewInt(int64(t.Weekday())))
+	result.Set(runtime.NewString("mon"), runtime.NewInt(int64(t.Month())))
+	result.Set(runtime.NewString("year"), runtime.NewInt(int64(t.Year())))
+	result.Set(runtime.NewString("yday"), runtime.NewInt(int64(t.YearDay()-1)))
+	result.Set(runtime.NewString("weekday"), runtime.NewString(t.Weekday().String()))
+	result.Set(runtime.NewString("month"), runtime.NewString(t.Month().String()))
+	result.Set(runtime.NewInt(0), runtime.NewInt(timestamp))
+
+	return result
+}
+
+func builtinCheckdate(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+
+	month := int(args[0].ToInt())
+	day := int(args[1].ToInt())
+	year := int(args[2].ToInt())
+
+	// Check if month is valid (1-12)
+	if month < 1 || month > 12 {
+		return runtime.FALSE
+	}
+
+	// Check if year is valid (1-32767)
+	if year < 1 || year > 32767 {
+		return runtime.FALSE
+	}
+
+	// Check if day is valid for the given month/year
+	daysInMonth := []int{0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}
+
+	// Check for leap year
+	isLeap := (year%4 == 0 && year%100 != 0) || (year%400 == 0)
+	if isLeap && month == 2 {
+		daysInMonth[2] = 29
+	}
+
+	if day < 1 || day > daysInMonth[month] {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
+func builtinIdate(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+
+	format := args[0].ToString()
+	var timestamp int64
+
+	if len(args) >= 2 {
+		timestamp = args[1].ToInt()
+	} else {
+		timestamp = time.Now().Unix()
+	}
+
+	t := time.Unix(timestamp, 0)
+
+	if len(format) == 0 {
+		return runtime.NewInt(0)
+	}
+
+	switch format[0] {
+	case 'B': // Swatch Internet time
+		return runtime.NewInt(0) // Not implemented
+	case 'd': // Day of the month
+		return runtime.NewInt(int64(t.Day()))
+	case 'h': // Hour (12-hour format)
+		h := t.Hour() % 12
+		if h == 0 {
+			h = 12
+		}
+		return runtime.NewInt(int64(h))
+	case 'H': // Hour (24-hour format)
+		return runtime.NewInt(int64(t.Hour()))
+	case 'i': // Minutes
+		return runtime.NewInt(int64(t.Minute()))
+	case 'I': // 1 if DST, 0 otherwise
+		return runtime.NewInt(0) // Not fully implemented
+	case 'L': // 1 if leap year, 0 otherwise
+		year := t.Year()
+		isLeap := (year%4 == 0 && year%100 != 0) || (year%400 == 0)
+		if isLeap {
+			return runtime.NewInt(1)
+		}
+		return runtime.NewInt(0)
+	case 'm': // Month number
+		return runtime.NewInt(int64(t.Month()))
+	case 's': // Seconds
+		return runtime.NewInt(int64(t.Second()))
+	case 't': // Days in current month
+		year, month := t.Year(), t.Month()
+		daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+		return runtime.NewInt(int64(daysInMonth))
+	case 'U': // Unix timestamp
+		return runtime.NewInt(timestamp)
+	case 'w': // Day of the week (0=Sunday)
+		return runtime.NewInt(int64(t.Weekday()))
+	case 'W': // ISO-8601 week number
+		_, week := t.ISOWeek()
+		return runtime.NewInt(int64(week))
+	case 'y': // Year (2 digits)
+		return runtime.NewInt(int64(t.Year() % 100))
+	case 'Y': // Year (4 digits)
+		return runtime.NewInt(int64(t.Year()))
+	case 'z': // Day of the year
+		return runtime.NewInt(int64(t.YearDay() - 1))
+	case 'Z': // Timezone offset in seconds
+		_, offset := t.Zone()
+		return runtime.NewInt(int64(offset))
+	default:
+		return runtime.NewInt(0)
+	}
 }
 
 // ----------------------------------------------------------------------------
