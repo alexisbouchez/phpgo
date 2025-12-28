@@ -2419,3 +2419,161 @@ func TestArrayAccessAppend(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// Iterator interface tests
+
+func TestIteratorBasic(t *testing.T) {
+	input := `<?php
+	class Range implements Iterator {
+		private $start;
+		private $end;
+		private $current;
+
+		public function __construct($start, $end) {
+			$this->start = $start;
+			$this->end = $end;
+		}
+
+		public function rewind() {
+			$this->current = $this->start;
+		}
+
+		public function valid() {
+			return $this->current <= $this->end;
+		}
+
+		public function current() {
+			return $this->current;
+		}
+
+		public function key() {
+			return $this->current - $this->start;
+		}
+
+		public function next() {
+			$this->current++;
+		}
+	}
+
+	$range = new Range(1, 5);
+	$result = [];
+	foreach ($range as $value) {
+		$result[] = $value;
+	}
+	echo implode(',', $result);
+	`
+	expected := "1,2,3,4,5"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestIteratorWithKeys(t *testing.T) {
+	input := `<?php
+	class MyIterator implements Iterator {
+		private $items = [10, 20, 30];
+		private $pos = 0;
+
+		public function rewind() {
+			$this->pos = 0;
+		}
+
+		public function valid() {
+			return $this->pos < count($this->items);
+		}
+
+		public function current() {
+			return $this->items[$this->pos];
+		}
+
+		public function key() {
+			return 'key' . $this->pos;
+		}
+
+		public function next() {
+			$this->pos++;
+		}
+	}
+
+	$iter = new MyIterator();
+	$result = [];
+	foreach ($iter as $key => $value) {
+		$result[] = "$key:$value";
+	}
+	echo implode(',', $result);
+	`
+	expected := "key0:10,key1:20,key2:30"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestIteratorBreak(t *testing.T) {
+	input := `<?php
+	class Counter implements Iterator {
+		private $pos = 0;
+		private $max;
+
+		public function __construct($max) {
+			$this->max = $max;
+		}
+
+		public function rewind() { $this->pos = 0; }
+		public function valid() { return $this->pos < $this->max; }
+		public function current() { return $this->pos; }
+		public function key() { return $this->pos; }
+		public function next() { $this->pos++; }
+	}
+
+	$counter = new Counter(10);
+	$result = [];
+	foreach ($counter as $val) {
+		if ($val >= 3) {
+			break;
+		}
+		$result[] = $val;
+	}
+	echo implode(',', $result);
+	`
+	expected := "0,1,2"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestIteratorContinue(t *testing.T) {
+	input := `<?php
+	class Counter implements Iterator {
+		private $pos = 0;
+		private $max;
+
+		public function __construct($max) {
+			$this->max = $max;
+		}
+
+		public function rewind() { $this->pos = 0; }
+		public function valid() { return $this->pos < $this->max; }
+		public function current() { return $this->pos; }
+		public function key() { return $this->pos; }
+		public function next() { $this->pos++; }
+	}
+
+	$counter = new Counter(6);
+	$result = [];
+	foreach ($counter as $val) {
+		if ($val % 2 == 0) {
+			continue;
+		}
+		$result[] = $val;
+	}
+	echo implode(',', $result);
+	`
+	expected := "1,3,5"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

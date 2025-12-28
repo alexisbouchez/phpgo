@@ -2,7 +2,6 @@ HIGH PRIORITY
 
 MEDIUM PRIORITY
 - Serialization (__sleep/__wakeup, serialize/unserialize)
-- Iterator/Traversable
 
 LOWER PRIORITY
 - Reflection API

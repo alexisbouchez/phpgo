@@ -322,6 +322,13 @@ func (i *Interpreter) evalFor(s *ast.ForStmt) runtime.Value {
 func (i *Interpreter) evalForeach(s *ast.ForeachStmt) runtime.Value {
 	arr := i.evalExpr(s.Expr)
 
+	// Check for Iterator interface first
+	if obj, ok := arr.(*runtime.Object); ok {
+		if i.implementsInterface(obj.Class, "Iterator") {
+			return i.evalForeachIterator(s, obj)
+		}
+	}
+
 	var keys []runtime.Value
 	var values map[runtime.Value]runtime.Value
 
@@ -369,6 +376,58 @@ func (i *Interpreter) evalForeach(s *ast.ForeachStmt) runtime.Value {
 		case *runtime.ReturnValue:
 			return result
 		}
+	}
+	return runtime.NULL
+}
+
+// evalForeachIterator handles foreach for objects implementing Iterator
+func (i *Interpreter) evalForeachIterator(s *ast.ForeachStmt, obj *runtime.Object) runtime.Value {
+	// rewind()
+	i.callArrayAccessMethod(obj, "rewind", []runtime.Value{})
+
+	for {
+		// valid()
+		valid := i.callArrayAccessMethod(obj, "valid", []runtime.Value{})
+		if !valid.ToBool() {
+			break
+		}
+
+		// key()
+		key := i.callArrayAccessMethod(obj, "key", []runtime.Value{})
+		// current()
+		val := i.callArrayAccessMethod(obj, "current", []runtime.Value{})
+
+		// Set key variable if present
+		if s.KeyVar != nil {
+			keyName := s.KeyVar.(*ast.Variable).Name.(*ast.Ident).Name
+			i.env.Set(keyName, key)
+		}
+
+		// Set value variable
+		valName := s.ValueVar.(*ast.Variable).Name.(*ast.Ident).Name
+		i.env.Set(valName, val)
+
+		// Execute body
+		result := i.evalStmt(s.Body)
+		switch r := result.(type) {
+		case *runtime.Break:
+			if r.Levels <= 1 {
+				return runtime.NULL
+			}
+			return &runtime.Break{Levels: r.Levels - 1}
+		case *runtime.Continue:
+			if r.Levels <= 1 {
+				// Still need to call next() before continuing
+				i.callArrayAccessMethod(obj, "next", []runtime.Value{})
+				continue
+			}
+			return &runtime.Continue{Levels: r.Levels - 1}
+		case *runtime.ReturnValue:
+			return result
+		}
+
+		// next()
+		i.callArrayAccessMethod(obj, "next", []runtime.Value{})
 	}
 	return runtime.NULL
 }

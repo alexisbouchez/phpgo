@@ -22,6 +22,7 @@ import (
 func (i *Interpreter) registerBuiltins() {
 	// Register built-in interfaces
 	i.registerArrayAccessInterface()
+	i.registerIteratorInterfaces()
 }
 
 func (i *Interpreter) registerArrayAccessInterface() {
@@ -52,6 +53,48 @@ func (i *Interpreter) registerArrayAccessInterface() {
 		},
 	}
 	i.env.DefineInterface("ArrayAccess", arrayAccess)
+}
+
+func (i *Interpreter) registerIteratorInterfaces() {
+	// Traversable is a marker interface (no methods)
+	traversable := &runtime.Interface{
+		Name:    "Traversable",
+		Methods: map[string]*runtime.Method{},
+	}
+	i.env.DefineInterface("Traversable", traversable)
+
+	// Iterator interface extends Traversable
+	iterator := &runtime.Interface{
+		Name: "Iterator",
+		Methods: map[string]*runtime.Method{
+			"current": {
+				Name:     "current",
+				Params:   []string{},
+				IsPublic: true,
+			},
+			"key": {
+				Name:     "key",
+				Params:   []string{},
+				IsPublic: true,
+			},
+			"next": {
+				Name:     "next",
+				Params:   []string{},
+				IsPublic: true,
+			},
+			"rewind": {
+				Name:     "rewind",
+				Params:   []string{},
+				IsPublic: true,
+			},
+			"valid": {
+				Name:     "valid",
+				Params:   []string{},
+				IsPublic: true,
+			},
+		},
+	}
+	i.env.DefineInterface("Iterator", iterator)
 }
 
 func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
