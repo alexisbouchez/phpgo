@@ -1,7 +1,6 @@
 HIGH PRIORITY
 
 MEDIUM PRIORITY
-- call_user_func / call_user_func_array
 - func_get_args / func_num_args
 - Serialization (__sleep/__wakeup, serialize/unserialize)
 - ArrayAccess interface

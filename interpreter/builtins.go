@@ -184,6 +184,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinFunctionExists
 	case "class_exists":
 		return i.builtinClassExists
+	case "call_user_func":
+		return i.builtinCallUserFunc
+	case "call_user_func_array":
+		return i.builtinCallUserFuncArray
 
 	// Regex functions
 	case "preg_match":
@@ -1597,6 +1601,177 @@ func (i *Interpreter) builtinClassExists(args ...runtime.Value) runtime.Value {
 	name := args[0].ToString()
 	_, ok := i.env.GetClass(name)
 	return runtime.NewBool(ok)
+}
+
+func (i *Interpreter) builtinCallUserFunc(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	callback := args[0]
+	callArgs := args[1:]
+
+	return i.callCallback(callback, callArgs)
+}
+
+func (i *Interpreter) builtinCallUserFuncArray(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NULL
+	}
+
+	callback := args[0]
+	argsArray, ok := args[1].(*runtime.Array)
+	if !ok {
+		return runtime.NULL
+	}
+
+	// Convert array to slice of values
+	callArgs := make([]runtime.Value, 0, argsArray.Len())
+	for _, key := range argsArray.Keys {
+		callArgs = append(callArgs, argsArray.Elements[key])
+	}
+
+	return i.callCallback(callback, callArgs)
+}
+
+// callCallback handles calling various callback types
+func (i *Interpreter) callCallback(callback runtime.Value, args []runtime.Value) runtime.Value {
+	switch cb := callback.(type) {
+	case *runtime.Function:
+		// Closure or anonymous function
+		return i.callFunctionWithArgs(cb, args)
+
+	case *runtime.String:
+		// Function name as string
+		funcName := cb.Value
+
+		// Check for builtin first
+		if builtin := i.getBuiltin(funcName); builtin != nil {
+			return builtin(args...)
+		}
+
+		// Check for user function
+		resolvedName := i.resolveFunctionName(funcName)
+		if fn, ok := i.env.GetFunction(resolvedName); ok {
+			return i.callFunctionWithArgs(fn, args)
+		}
+
+		// Try original name
+		if fn, ok := i.env.GetFunction(funcName); ok {
+			return i.callFunctionWithArgs(fn, args)
+		}
+
+		return runtime.NULL
+
+	case *runtime.Array:
+		// Array callback: [$object, 'method'] or ['ClassName', 'method']
+		if cb.Len() != 2 {
+			return runtime.NULL
+		}
+
+		first := cb.Elements[cb.Keys[0]]
+		second := cb.Elements[cb.Keys[1]]
+		methodName := second.ToString()
+
+		switch target := first.(type) {
+		case *runtime.Object:
+			// Instance method call
+			if method, foundClass := i.findMethod(target.Class, methodName); method != nil {
+				return i.invokeMethodWithArgs(target, method, foundClass, args)
+			}
+
+		case *runtime.String:
+			// Static method call
+			className := i.resolveClassName(target.Value)
+			class, ok := i.env.GetClass(className)
+			if !ok {
+				class, ok = i.env.GetClass(target.Value)
+			}
+			if ok {
+				if method, foundClass := i.findMethod(class, methodName); method != nil && method.IsStatic {
+					return i.invokeStaticMethodWithArgs(class, method, foundClass, args)
+				}
+			}
+		}
+	}
+
+	return runtime.NULL
+}
+
+// invokeMethodWithArgs calls an object method with given args
+func (i *Interpreter) invokeMethodWithArgs(obj *runtime.Object, method *runtime.Method, foundClass *runtime.Class, args []runtime.Value) runtime.Value {
+	env := runtime.NewEnclosedEnvironment(i.env)
+	env.Set("this", obj)
+	oldEnv := i.env
+	oldClass := i.currentClass
+	oldThis := i.currentThis
+	i.env = env
+	i.currentClass = foundClass.Name
+	i.currentThis = obj
+
+	// Bind parameters
+	for idx, param := range method.Params {
+		if idx < len(args) {
+			env.Set(param, args[idx])
+		} else if idx < len(method.Defaults) && method.Defaults[idx] != nil {
+			env.Set(param, method.Defaults[idx])
+		}
+	}
+
+	// Handle variadic
+	if method.Variadic && len(method.Params) > 0 {
+		lastParam := method.Params[len(method.Params)-1]
+		variadicArgs := runtime.NewArray()
+		for idx := len(method.Params) - 1; idx < len(args); idx++ {
+			variadicArgs.Set(nil, args[idx])
+		}
+		env.Set(lastParam, variadicArgs)
+	}
+
+	var result runtime.Value = runtime.NULL
+	if block, ok := method.Body.(*ast.BlockStmt); ok {
+		result = i.evalBlock(block)
+	}
+
+	i.env = oldEnv
+	i.currentClass = oldClass
+	i.currentThis = oldThis
+
+	if ret, ok := result.(*runtime.ReturnValue); ok {
+		return ret.Value
+	}
+	return result
+}
+
+// invokeStaticMethodWithArgs calls a static method with given args
+func (i *Interpreter) invokeStaticMethodWithArgs(class *runtime.Class, method *runtime.Method, foundClass *runtime.Class, args []runtime.Value) runtime.Value {
+	env := runtime.NewEnclosedEnvironment(i.env)
+	oldEnv := i.env
+	oldClass := i.currentClass
+	i.env = env
+	i.currentClass = foundClass.Name
+
+	// Bind parameters
+	for idx, param := range method.Params {
+		if idx < len(args) {
+			env.Set(param, args[idx])
+		} else if idx < len(method.Defaults) && method.Defaults[idx] != nil {
+			env.Set(param, method.Defaults[idx])
+		}
+	}
+
+	var result runtime.Value = runtime.NULL
+	if block, ok := method.Body.(*ast.BlockStmt); ok {
+		result = i.evalBlock(block)
+	}
+
+	i.env = oldEnv
+	i.currentClass = oldClass
+
+	if ret, ok := result.(*runtime.ReturnValue); ok {
+		return ret.Value
+	}
+	return result
 }
 
 // ----------------------------------------------------------------------------

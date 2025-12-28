@@ -2052,3 +2052,102 @@ func TestEvalNamespaceFQN(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// call_user_func / call_user_func_array
+
+func TestEvalCallUserFuncString(t *testing.T) {
+	input := `<?php
+	function greet($name) {
+		return "Hello, " . $name;
+	}
+	echo call_user_func('greet', 'World');
+	`
+	expected := "Hello, World"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalCallUserFuncClosure(t *testing.T) {
+	input := `<?php
+	$fn = function($x, $y) {
+		return $x + $y;
+	};
+	echo call_user_func($fn, 3, 4);
+	`
+	expected := "7"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalCallUserFuncMethod(t *testing.T) {
+	input := `<?php
+	class Calculator {
+		public function add($a, $b) {
+			return $a + $b;
+		}
+	}
+	$calc = new Calculator();
+	echo call_user_func([$calc, 'add'], 10, 20);
+	`
+	expected := "30"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalCallUserFuncStaticMethod(t *testing.T) {
+	input := `<?php
+	class Math {
+		public static function multiply($a, $b) {
+			return $a * $b;
+		}
+	}
+	echo call_user_func(['Math', 'multiply'], 5, 6);
+	`
+	expected := "30"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalCallUserFuncArray(t *testing.T) {
+	input := `<?php
+	function sum($a, $b, $c) {
+		return $a + $b + $c;
+	}
+	echo call_user_func_array('sum', [1, 2, 3]);
+	`
+	expected := "6"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalCallUserFuncArrayMethod(t *testing.T) {
+	input := `<?php
+	class Greeter {
+		private $prefix;
+		public function __construct($prefix) {
+			$this->prefix = $prefix;
+		}
+		public function greet($name) {
+			return $this->prefix . " " . $name;
+		}
+	}
+	$g = new Greeter("Hello");
+	echo call_user_func_array([$g, 'greet'], ['Alice']);
+	`
+	expected := "Hello Alice"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
