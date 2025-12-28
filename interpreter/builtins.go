@@ -2016,13 +2016,39 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "imagesavealpha":
 		return i.builtinImageSaveAlpha
 
-	// SimpleXML functions (commented out for now - needs proper implementation)
-	// case "simplexml_load_string":
-	//     return i.builtinSimpleXMLElementLoadString
-	// case "simplexml_load_file":
-	//     return i.builtinSimpleXMLElementLoadFile
-	// case "simplexml_import_dom":
-	//     return i.builtinSimpleXMLElementImportDom
+	// XMLReader/XMLWriter functions
+	case "xmlreader_open":
+		return i.builtinXMLReaderOpen
+	case "xmlreader_set_parser_property":
+		return i.builtinXMLReaderSetParserProperty
+	case "xmlreader_read":
+		return i.builtinXMLReaderRead
+	case "xmlreader_close":
+		return i.builtinXMLReaderClose
+	
+	// SAX parsing functions
+	case "xml_parser_create":
+		return i.builtinXMLParserCreate
+	case "xml_parse":
+		return i.builtinXMLParse
+	case "xml_parser_free":
+		return i.builtinXMLParserFree
+	case "xml_set_element_handler":
+		return i.builtinXMLSetElementHandler
+	case "xml_set_character_data_handler":
+		return i.builtinXMLSetCharacterDataHandler
+
+	// DOM functions
+	case "domdocument_create":
+		return i.builtinDOMDocumentCreate
+	case "domdocument_load":
+		return i.builtinDOMDocumentLoad
+	case "domdocument_loadxml":
+		return i.builtinDOMDocumentLoadXML
+	case "domdocument_save":
+		return i.builtinDOMDocumentSave
+	case "domdocument_savexml":
+		return i.builtinDOMDocumentSaveXML
 
 	// Gettext functions
 	case "gettext", "_":
@@ -12615,12 +12641,38 @@ const (
 	CURLOPT_MAXREDIRS      = 68
 )
 
+// XMLParser structure (for SAX parsing)
+type XMLParser struct {
+	elementHandler        runtime.Value
+	characterDataHandler runtime.Value
+	currentElement       string
+	currentData          string
+	depth                int
+}
+
+// XMLReader structure
+type XMLReader struct {
+	filename    string
+	data        string
+	position    int
+	currentNode *SimpleXMLElement
+	closed      bool
+}
+
+// DOMDocument structure
+type DOMDocument struct {
+	rootElement *SimpleXMLElement
+	version     string
+	encoding    string
+}
+
 // SimpleXML element structure
 type SimpleXMLElement struct {
-	Name     string
-	Value    string
+	Name       string
+	Value      string
 	Attributes map[string]string
-	Children  []*SimpleXMLElement
+	Children   []*SimpleXMLElement
+	Parent     *SimpleXMLElement
 }
 
 // GD image handle structure
@@ -13452,6 +13504,338 @@ func (i *Interpreter) builtinSimpleXMLElementImportDom(args ...runtime.Value) ru
 	return runtime.FALSE
 }
 
+func parseXMLString(xmlData string, elem *SimpleXMLElement) error {
+	// Simple XML parser - for now, we'll use a basic approach
+	// In a full implementation, we would use proper XML parsing
+	
+	// For now, let's create a simple element structure
+	elem.Name = "root"
+	elem.Value = xmlData
+	elem.Attributes = make(map[string]string)
+	elem.Children = make([]*SimpleXMLElement, 0)
+	
+	// Basic XML parsing - this is simplified for demonstration
+	// A real implementation would use proper XML parsing
+	return nil
+}
+
+// XMLReader functions
+func (i *Interpreter) builtinXMLReaderOpen(args ...runtime.Value) runtime.Value {
+	// xmlreader_open(string $filename) : XMLReader|false
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	filename := args[0].ToString()
+	
+	// Read the file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Create XMLReader
+	reader := &XMLReader{
+		filename: filename,
+		data:     string(data),
+		position: 0,
+		closed:   false,
+	}
+	
+	// Parse the XML data
+	err = parseXMLString(reader.data, &SimpleXMLElement{})
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Store the reader
+	readerID := len(i.xmlReaders) + 1
+	i.xmlReaders[readerID] = reader
+	
+	return runtime.NewInt(int64(readerID))
+}
+
+func (i *Interpreter) builtinXMLReaderSetParserProperty(args ...runtime.Value) runtime.Value {
+	// xmlreader_set_parser_property(resource $xmlreader, int $property, bool $value) : bool
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+	
+	readerID := int(args[0].ToInt())
+	// property := int(args[1].ToInt())
+	// value := args[2].ToBool()
+	
+	reader, ok := i.xmlReaders[readerID]
+	if !ok || reader.closed {
+		return runtime.FALSE
+	}
+	
+	// For now, just return true
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinXMLReaderRead(args ...runtime.Value) runtime.Value {
+	// xmlreader_read(resource $xmlreader) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	readerID := int(args[0].ToInt())
+	
+	reader, ok := i.xmlReaders[readerID]
+	if !ok || reader.closed {
+		return runtime.FALSE
+	}
+	
+	// For now, just return true
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinXMLReaderClose(args ...runtime.Value) runtime.Value {
+	// xmlreader_close(resource $xmlreader) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	readerID := int(args[0].ToInt())
+	
+	reader, ok := i.xmlReaders[readerID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	reader.closed = true
+	delete(i.xmlReaders, readerID)
+	
+	return runtime.TRUE
+}
+
+// DOMDocument functions
+func (i *Interpreter) builtinDOMDocumentCreate(args ...runtime.Value) runtime.Value {
+	// domdocument_create(string $version, string $encoding) : DOMDocument
+	version := "1.0"
+	encoding := "UTF-8"
+	
+	if len(args) >= 1 {
+		version = args[0].ToString()
+	}
+	if len(args) >= 2 {
+		encoding = args[1].ToString()
+	}
+	
+	doc := &DOMDocument{
+		version:  version,
+		encoding: encoding,
+	}
+	
+	// Store the document
+	docID := len(i.domDocuments) + 1
+	i.domDocuments[docID] = doc
+	
+	return runtime.NewInt(int64(docID))
+}
+
+func (i *Interpreter) builtinDOMDocumentLoad(args ...runtime.Value) runtime.Value {
+	// domdocument_load(resource $doc, string $filename) : bool
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	docID := int(args[0].ToInt())
+	filename := args[1].ToString()
+	
+	doc, ok := i.domDocuments[docID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Read the file
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	// Parse the XML
+	var root SimpleXMLElement
+	err = parseXMLString(string(data), &root)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	doc.rootElement = &root
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinDOMDocumentLoadXML(args ...runtime.Value) runtime.Value {
+	// domdocument_loadxml(resource $doc, string $source) : bool
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	docID := int(args[0].ToInt())
+	xmlData := args[1].ToString()
+	
+	doc, ok := i.domDocuments[docID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Parse the XML
+	var root SimpleXMLElement
+	err := parseXMLString(xmlData, &root)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	doc.rootElement = &root
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinDOMDocumentSave(args ...runtime.Value) runtime.Value {
+	// domdocument_save(resource $doc, string $filename) : int|false
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	docID := int(args[0].ToInt())
+	filename := args[1].ToString()
+	
+	doc, ok := i.domDocuments[docID]
+	if !ok || doc.rootElement == nil {
+		return runtime.FALSE
+	}
+	
+	// For now, just save the root element value
+	// In a full implementation, we would properly serialize the XML
+	err := os.WriteFile(filename, []byte(doc.rootElement.Value), 0644)
+	if err != nil {
+		return runtime.FALSE
+	}
+	
+	return runtime.NewInt(int64(len(doc.rootElement.Value)))
+}
+
+func (i *Interpreter) builtinDOMDocumentSaveXML(args ...runtime.Value) runtime.Value {
+	// domdocument_savexml(resource $doc) : string|false
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	docID := int(args[0].ToInt())
+	
+	doc, ok := i.domDocuments[docID]
+	if !ok || doc.rootElement == nil {
+		return runtime.FALSE
+	}
+	
+	// For now, just return the root element value
+	// In a full implementation, we would properly serialize the XML
+	return runtime.NewString(doc.rootElement.Value)
+}
+
+// SAX parsing functions
+func (i *Interpreter) builtinXMLParserCreate(args ...runtime.Value) runtime.Value {
+	// xml_parser_create(string $encoding) : resource
+	encoding := "UTF-8"
+	if len(args) >= 1 {
+		encoding = args[0].ToString()
+	}
+	
+	parser := &XMLParser{
+		elementHandler:        runtime.NULL,
+		characterDataHandler: runtime.NULL,
+		currentElement:       "",
+		currentData:          "",
+		depth:                0,
+	}
+	
+	parserID := len(i.xmlParsers) + 1
+	i.xmlParsers[parserID] = parser
+	
+	return runtime.NewInt(int64(parserID))
+}
+
+func (i *Interpreter) builtinXMLParse(args ...runtime.Value) runtime.Value {
+	// xml_parse(resource $parser, string $data, bool $is_final) : int
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+	
+	parserID := int(args[0].ToInt())
+	xmlData := args[1].ToString()
+	isFinal := false
+	if len(args) >= 3 {
+		isFinal = args[2].ToBool()
+	}
+	
+	parser, ok := i.xmlParsers[parserID]
+	if !ok {
+		return runtime.NewInt(0)
+	}
+	
+	// Simple XML parsing simulation
+	// In a real implementation, we would use proper SAX parsing
+	
+	// For now, just return success
+	return runtime.NewInt(1)
+}
+
+func (i *Interpreter) builtinXMLParserFree(args ...runtime.Value) runtime.Value {
+	// xml_parser_free(resource $parser) : bool
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	
+	parserID := int(args[0].ToInt())
+	delete(i.xmlParsers, parserID)
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinXMLSetElementHandler(args ...runtime.Value) runtime.Value {
+	// xml_set_element_handler(resource $parser, callable $start_element_handler, callable $end_element_handler) : bool
+	if len(args) < 3 {
+		return runtime.FALSE
+	}
+	
+	parserID := int(args[0].ToInt())
+	startHandler := args[1]
+	endHandler := args[2]
+	
+	parser, ok := i.xmlParsers[parserID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Store the element handler (simplified)
+	parser.elementHandler = startHandler
+	
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinXMLSetCharacterDataHandler(args ...runtime.Value) runtime.Value {
+	// xml_set_character_data_handler(resource $parser, callable $handler) : bool
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	
+	parserID := int(args[0].ToInt())
+	handler := args[1]
+	
+	parser, ok := i.xmlParsers[parserID]
+	if !ok {
+		return runtime.FALSE
+	}
+	
+	// Store the character data handler
+	parser.characterDataHandler = handler
+	
+	return runtime.TRUE
+}
+
+// Enhanced XML parsing function
 func parseXMLString(xmlData string, elem *SimpleXMLElement) error {
 	// Simple XML parser - for now, we'll use a basic approach
 	// In a full implementation, we would use proper XML parsing

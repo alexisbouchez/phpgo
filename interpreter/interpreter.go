@@ -39,6 +39,9 @@ type Interpreter struct {
 	exceptionHandlers []runtime.Value     // Stack of exception handlers
 	curlHandles       map[int]*CurlHandle // Active cURL handles
 	gdImages          map[int]*GDImage    // Active GD images
+	xmlReaders        map[int]*XMLReader  // Active XML readers
+	domDocuments       map[int]*DOMDocument // Active DOM documents
+	xmlParsers         map[int]*XMLParser   // Active XML parsers
 }
 
 // HTTPContext represents HTTP request information
@@ -77,6 +80,9 @@ func New() *Interpreter {
 		autoloadFuncs:  make([]runtime.Value, 0),
 		curlHandles:    make(map[int]*CurlHandle),
 		gdImages:      make(map[int]*GDImage),
+		xmlReaders:    make(map[int]*XMLReader),
+		domDocuments:  make(map[int]*DOMDocument),
+		xmlParsers:    make(map[int]*XMLParser),
 		iniSettings:    make(map[string]string),
 		httpContext: &HTTPContext{
 			Headers:         make(map[string]string),
