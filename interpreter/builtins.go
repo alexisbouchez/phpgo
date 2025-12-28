@@ -4,6 +4,7 @@ import (
 	"crypto/md5"
 	"crypto/sha1"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -503,6 +504,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinFtell
 	case "rewind":
 		return builtinRewind
+	case "readfile":
+		return builtinReadfile
+	case "fgetcsv":
+		return builtinFgetcsv
+	case "fputcsv":
+		return builtinFputcsv
 	case "unlink":
 		return builtinUnlink
 	case "copy":
@@ -4802,6 +4809,138 @@ func builtinRewind(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+func builtinReadfile(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename, ok := args[0].(*runtime.String)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	content, err := os.ReadFile(filename.Value)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	fmt.Print(string(content))
+	return runtime.NewInt(int64(len(content)))
+}
+
+func builtinFgetcsv(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	file, ok := res.Handle.(*os.File)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Default parameters
+	delimiter := ','
+
+	if len(args) >= 3 {
+		if delim, ok := args[2].(*runtime.String); ok && len(delim.Value) > 0 {
+			delimiter = rune(delim.Value[0])
+		}
+	}
+
+	reader := csv.NewReader(file)
+	reader.Comma = delimiter
+	reader.LazyQuotes = true
+	reader.TrimLeadingSpace = false
+
+	record, err := reader.Read()
+	if err == io.EOF {
+		return runtime.FALSE
+	}
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Convert string slice to PHP array
+	arr := runtime.NewArray()
+	for _, field := range record {
+		arr.Set(nil, runtime.NewString(field))
+	}
+
+	return arr
+}
+
+func builtinFputcsv(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	file, ok := res.Handle.(*os.File)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	fields, ok := args[1].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Default parameters
+	delimiter := ','
+
+	if len(args) >= 3 {
+		if delim, ok := args[2].(*runtime.String); ok && len(delim.Value) > 0 {
+			delimiter = rune(delim.Value[0])
+		}
+	}
+
+	writer := csv.NewWriter(file)
+	writer.Comma = delimiter
+
+	// Convert PHP array to string slice
+	var record []string
+	for _, key := range fields.Keys {
+		val := fields.Elements[key]
+		switch v := val.(type) {
+		case *runtime.String:
+			record = append(record, v.Value)
+		case *runtime.Int:
+			record = append(record, fmt.Sprintf("%d", v.Value))
+		case *runtime.Float:
+			record = append(record, fmt.Sprintf("%g", v.Value))
+		case *runtime.Bool:
+			if v.Value {
+				record = append(record, "1")
+			} else {
+				record = append(record, "")
+			}
+		default:
+			record = append(record, "")
+		}
+	}
+
+	err := writer.Write(record)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
 }
 
 func builtinUnlink(args ...runtime.Value) runtime.Value {
