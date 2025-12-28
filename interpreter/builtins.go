@@ -325,6 +325,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinIsCallable
 	case "filter_var":
 		return builtinFilterVar
+	case "filter_input":
+		return i.builtinFilterInput
+	case "filter_input_array":
+		return i.builtinFilterInputArray
+	case "filter_var_array":
+		return builtinFilterVarArray
 	case "intval":
 		return builtinIntval
 	case "floatval", "doubleval":
@@ -529,6 +535,32 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinCheckdate
 	case "idate":
 		return builtinIdate
+	case "date_create":
+		return builtinDateCreate
+	case "date_create_from_format":
+		return builtinDateCreateFromFormat
+	case "date_format":
+		return builtinDateFormat
+	case "date_modify":
+		return builtinDateModify
+	case "date_add":
+		return builtinDateAdd
+	case "date_sub":
+		return builtinDateSub
+	case "date_diff":
+		return builtinDateDiff
+	case "date_timestamp_get":
+		return builtinDateTimestampGet
+	case "date_timestamp_set":
+		return builtinDateTimestampSet
+	case "date_timezone_get":
+		return builtinDateTimezoneGet
+	case "date_timezone_set":
+		return builtinDateTimezoneSet
+	case "date_parse":
+		return builtinDateParse
+	case "date_parse_from_format":
+		return builtinDateParseFromFormat
 
 	// Hash functions
 	case "md5":
@@ -3102,6 +3134,193 @@ func builtinFilterVar(args ...runtime.Value) runtime.Value {
 	default:
 		return runtime.NewString(value)
 	}
+}
+
+// INPUT type constants
+const (
+	INPUT_POST   = 0
+	INPUT_GET    = 1
+	INPUT_COOKIE = 2
+	INPUT_SERVER = 4
+	INPUT_ENV    = 5
+)
+
+func (i *Interpreter) builtinFilterInput(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NULL
+	}
+
+	inputType := int(args[0].ToInt())
+	varName := args[1].ToString()
+	filterType := int64(516) // FILTER_DEFAULT
+
+	if len(args) >= 3 {
+		filterType = args[2].ToInt()
+	}
+
+	// Get the appropriate superglobal based on input type
+	var source runtime.Value
+	switch inputType {
+	case INPUT_GET:
+		source, _ = i.env.Global().Get("_GET")
+	case INPUT_POST:
+		source, _ = i.env.Global().Get("_POST")
+	case INPUT_COOKIE:
+		source, _ = i.env.Global().Get("_COOKIE")
+	case INPUT_SERVER:
+		source, _ = i.env.Global().Get("_SERVER")
+	case INPUT_ENV:
+		source, _ = i.env.Global().Get("_ENV")
+	default:
+		return runtime.NULL
+	}
+
+	if source == nil {
+		return runtime.NULL
+	}
+
+	arr, ok := source.(*runtime.Array)
+	if !ok {
+		return runtime.NULL
+	}
+
+	val := arr.Get(runtime.NewString(varName))
+	if val == nil || val == runtime.NULL {
+		return runtime.NULL
+	}
+
+	// Apply filter using filter_var logic
+	return builtinFilterVar(val, runtime.NewInt(filterType))
+}
+
+func (i *Interpreter) builtinFilterInputArray(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	inputType := int(args[0].ToInt())
+
+	// Get the appropriate superglobal based on input type
+	var source runtime.Value
+	switch inputType {
+	case INPUT_GET:
+		source, _ = i.env.Global().Get("_GET")
+	case INPUT_POST:
+		source, _ = i.env.Global().Get("_POST")
+	case INPUT_COOKIE:
+		source, _ = i.env.Global().Get("_COOKIE")
+	case INPUT_SERVER:
+		source, _ = i.env.Global().Get("_SERVER")
+	case INPUT_ENV:
+		source, _ = i.env.Global().Get("_ENV")
+	default:
+		return runtime.FALSE
+	}
+
+	if source == nil {
+		return runtime.FALSE
+	}
+
+	arr, ok := source.(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// If a definition array is provided, filter according to it
+	if len(args) >= 2 {
+		definition, ok := args[1].(*runtime.Array)
+		if !ok {
+			return runtime.FALSE
+		}
+
+		result := runtime.NewArray()
+		for _, key := range definition.Keys {
+			keyStr := key.ToString()
+			val := arr.Get(runtime.NewString(keyStr))
+			filterDef := definition.Elements[key]
+
+			if val == nil || val == runtime.NULL {
+				result.Set(key, runtime.NULL)
+				continue
+			}
+
+			// Get filter type from definition
+			filterType := int64(516)
+			if filterArr, ok := filterDef.(*runtime.Array); ok {
+				if ft := filterArr.Get(runtime.NewString("filter")); ft != nil {
+					filterType = ft.ToInt()
+				}
+			} else {
+				filterType = filterDef.ToInt()
+			}
+
+			result.Set(key, builtinFilterVar(val, runtime.NewInt(filterType)))
+		}
+		return result
+	}
+
+	// Return copy of the array as-is
+	result := runtime.NewArray()
+	for _, key := range arr.Keys {
+		result.Set(key, arr.Elements[key])
+	}
+	return result
+}
+
+func builtinFilterVarArray(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// If a definition array is provided, filter according to it
+	if len(args) >= 2 {
+		definition, ok := args[1].(*runtime.Array)
+		if !ok {
+			return runtime.FALSE
+		}
+
+		result := runtime.NewArray()
+		for _, key := range definition.Keys {
+			keyStr := key.ToString()
+			val := arr.Get(runtime.NewString(keyStr))
+			filterDef := definition.Elements[key]
+
+			if val == nil || val == runtime.NULL {
+				result.Set(key, runtime.NULL)
+				continue
+			}
+
+			// Get filter type from definition
+			filterType := int64(516)
+			if filterArr, ok := filterDef.(*runtime.Array); ok {
+				if ft := filterArr.Get(runtime.NewString("filter")); ft != nil {
+					filterType = ft.ToInt()
+				}
+			} else {
+				filterType = filterDef.ToInt()
+			}
+
+			result.Set(key, builtinFilterVar(val, runtime.NewInt(filterType)))
+		}
+		return result
+	}
+
+	// Apply default filter to all elements
+	filterType := int64(516)
+	if len(args) >= 2 {
+		filterType = args[1].ToInt()
+	}
+
+	result := runtime.NewArray()
+	for _, key := range arr.Keys {
+		result.Set(key, builtinFilterVar(arr.Elements[key], runtime.NewInt(filterType)))
+	}
+	return result
 }
 
 func builtinIntval(args ...runtime.Value) runtime.Value {
@@ -9960,4 +10179,551 @@ func builtinTimezoneNameFromAbbr(args ...runtime.Value) runtime.Value {
 
 func builtinTimezoneVersionGet(args ...runtime.Value) runtime.Value {
 	return runtime.NewString("2024.1")
+}
+
+// ----------------------------------------------------------------------------
+// Date/DateTime functions (procedural API)
+
+// DateTimeValue represents a PHP DateTime-like value
+type DateTimeValue struct {
+	Time     time.Time
+	Timezone string
+}
+
+func (d *DateTimeValue) Type() string     { return "object" }
+func (d *DateTimeValue) Inspect() string  { return d.Time.Format(time.RFC3339) }
+func (d *DateTimeValue) ToString() string { return d.Time.Format("2006-01-02 15:04:05") }
+func (d *DateTimeValue) ToInt() int64     { return d.Time.Unix() }
+func (d *DateTimeValue) ToFloat() float64 { return float64(d.Time.UnixNano()) / 1e9 }
+func (d *DateTimeValue) ToBool() bool     { return true }
+func (d *DateTimeValue) Clone() runtime.Value {
+	return &DateTimeValue{Time: d.Time, Timezone: d.Timezone}
+}
+
+func builtinDateCreate(args ...runtime.Value) runtime.Value {
+	t := time.Now()
+	tz := "UTC"
+
+	if len(args) >= 1 && args[0] != runtime.NULL {
+		dateStr := args[0].ToString()
+		if dateStr != "" {
+			parsed, err := parseDateTime(dateStr)
+			if err != nil {
+				return runtime.FALSE
+			}
+			t = parsed
+		}
+	}
+
+	if len(args) >= 2 && args[1] != runtime.NULL {
+		tz = args[1].ToString()
+	}
+
+	return &DateTimeValue{Time: t, Timezone: tz}
+}
+
+func builtinDateCreateFromFormat(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	format := args[0].ToString()
+	dateStr := args[1].ToString()
+
+	goFormat := phpToGoDateFormat(format)
+	t, err := time.Parse(goFormat, dateStr)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	tz := "UTC"
+	if len(args) >= 3 && args[2] != runtime.NULL {
+		tz = args[2].ToString()
+	}
+
+	return &DateTimeValue{Time: t, Timezone: tz}
+}
+
+func builtinDateFormat(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	format := args[1].ToString()
+	return runtime.NewString(convertPHPDateFormat(format, dt.Time))
+}
+
+func builtinDateModify(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	modifier := args[1].ToString()
+	modified, err := modifyDateTime(dt.Time, modifier)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	dt.Time = modified
+	return dt
+}
+
+func builtinDateAdd(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Second arg should be a DateInterval, but we'll accept a string
+	interval := args[1].ToString()
+	duration, err := parseInterval(interval)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	dt.Time = dt.Time.Add(duration)
+	return dt
+}
+
+func builtinDateSub(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	interval := args[1].ToString()
+	duration, err := parseInterval(interval)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	dt.Time = dt.Time.Add(-duration)
+	return dt
+}
+
+func builtinDateDiff(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt1, ok1 := args[0].(*DateTimeValue)
+	dt2, ok2 := args[1].(*DateTimeValue)
+	if !ok1 || !ok2 {
+		return runtime.FALSE
+	}
+
+	diff := dt2.Time.Sub(dt1.Time)
+
+	// Return an array with interval info
+	result := runtime.NewArray()
+	days := int64(diff.Hours() / 24)
+	hours := int64(diff.Hours()) % 24
+	minutes := int64(diff.Minutes()) % 60
+	seconds := int64(diff.Seconds()) % 60
+
+	result.Set(runtime.NewString("y"), runtime.NewInt(days/365))
+	result.Set(runtime.NewString("m"), runtime.NewInt((days%365)/30))
+	result.Set(runtime.NewString("d"), runtime.NewInt((days%365)%30))
+	result.Set(runtime.NewString("h"), runtime.NewInt(hours))
+	result.Set(runtime.NewString("i"), runtime.NewInt(minutes))
+	result.Set(runtime.NewString("s"), runtime.NewInt(seconds))
+	result.Set(runtime.NewString("days"), runtime.NewInt(days))
+	if diff < 0 {
+		result.Set(runtime.NewString("invert"), runtime.NewInt(1))
+	} else {
+		result.Set(runtime.NewString("invert"), runtime.NewInt(0))
+	}
+
+	return result
+}
+
+func builtinDateTimestampGet(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	return runtime.NewInt(dt.Time.Unix())
+}
+
+func builtinDateTimestampSet(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	timestamp := args[1].ToInt()
+	dt.Time = time.Unix(timestamp, 0)
+	return dt
+}
+
+func builtinDateTimezoneGet(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(dt.Timezone)
+}
+
+func builtinDateTimezoneSet(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	dt, ok := args[0].(*DateTimeValue)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	tz := args[1].ToString()
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	dt.Time = dt.Time.In(loc)
+	dt.Timezone = tz
+	return dt
+}
+
+func builtinDateParse(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	dateStr := args[0].ToString()
+	t, err := parseDateTime(dateStr)
+	if err != nil {
+		result := runtime.NewArray()
+		result.Set(runtime.NewString("error_count"), runtime.NewInt(1))
+		result.Set(runtime.NewString("errors"), runtime.NewArray())
+		return result
+	}
+
+	result := runtime.NewArray()
+	result.Set(runtime.NewString("year"), runtime.NewInt(int64(t.Year())))
+	result.Set(runtime.NewString("month"), runtime.NewInt(int64(t.Month())))
+	result.Set(runtime.NewString("day"), runtime.NewInt(int64(t.Day())))
+	result.Set(runtime.NewString("hour"), runtime.NewInt(int64(t.Hour())))
+	result.Set(runtime.NewString("minute"), runtime.NewInt(int64(t.Minute())))
+	result.Set(runtime.NewString("second"), runtime.NewInt(int64(t.Second())))
+	result.Set(runtime.NewString("error_count"), runtime.NewInt(0))
+	result.Set(runtime.NewString("errors"), runtime.NewArray())
+	result.Set(runtime.NewString("warning_count"), runtime.NewInt(0))
+	result.Set(runtime.NewString("warnings"), runtime.NewArray())
+
+	return result
+}
+
+func builtinDateParseFromFormat(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	format := args[0].ToString()
+	dateStr := args[1].ToString()
+
+	goFormat := phpToGoDateFormat(format)
+	t, err := time.Parse(goFormat, dateStr)
+	if err != nil {
+		result := runtime.NewArray()
+		result.Set(runtime.NewString("error_count"), runtime.NewInt(1))
+		errors := runtime.NewArray()
+		errors.Set(runtime.NewInt(0), runtime.NewString(err.Error()))
+		result.Set(runtime.NewString("errors"), errors)
+		return result
+	}
+
+	result := runtime.NewArray()
+	result.Set(runtime.NewString("year"), runtime.NewInt(int64(t.Year())))
+	result.Set(runtime.NewString("month"), runtime.NewInt(int64(t.Month())))
+	result.Set(runtime.NewString("day"), runtime.NewInt(int64(t.Day())))
+	result.Set(runtime.NewString("hour"), runtime.NewInt(int64(t.Hour())))
+	result.Set(runtime.NewString("minute"), runtime.NewInt(int64(t.Minute())))
+	result.Set(runtime.NewString("second"), runtime.NewInt(int64(t.Second())))
+	result.Set(runtime.NewString("error_count"), runtime.NewInt(0))
+	result.Set(runtime.NewString("errors"), runtime.NewArray())
+	result.Set(runtime.NewString("warning_count"), runtime.NewInt(0))
+	result.Set(runtime.NewString("warnings"), runtime.NewArray())
+
+	return result
+}
+
+// Helper function to parse date/time modifiers
+func modifyDateTime(t time.Time, modifier string) (time.Time, error) {
+	modifier = strings.ToLower(strings.TrimSpace(modifier))
+
+	// Handle relative formats
+	if strings.HasPrefix(modifier, "+") || strings.HasPrefix(modifier, "-") {
+		duration, err := parseRelativeTime(modifier)
+		if err != nil {
+			return t, err
+		}
+		return t.Add(duration), nil
+	}
+
+	// Handle word-based modifiers
+	switch modifier {
+	case "now":
+		return time.Now(), nil
+	case "today":
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()), nil
+	case "tomorrow":
+		return time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location()), nil
+	case "yesterday":
+		return time.Date(t.Year(), t.Month(), t.Day()-1, 0, 0, 0, 0, t.Location()), nil
+	case "midnight":
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location()), nil
+	case "noon":
+		return time.Date(t.Year(), t.Month(), t.Day(), 12, 0, 0, 0, t.Location()), nil
+	default:
+		// Try parsing as relative time without sign
+		duration, err := parseRelativeTime("+" + modifier)
+		if err == nil {
+			return t.Add(duration), nil
+		}
+		return t, fmt.Errorf("unknown modifier: %s", modifier)
+	}
+}
+
+// Helper function to parse relative time strings
+func parseRelativeTime(s string) (time.Duration, error) {
+	s = strings.ToLower(strings.TrimSpace(s))
+	negative := strings.HasPrefix(s, "-")
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "+"), "-")
+	s = strings.TrimSpace(s)
+
+	// Parse number and unit
+	parts := strings.Fields(s)
+	if len(parts) < 2 {
+		// Try parsing as single unit like "1day"
+		for _, unit := range []string{"year", "month", "week", "day", "hour", "minute", "second"} {
+			if strings.HasSuffix(s, unit) || strings.HasSuffix(s, unit+"s") {
+				numStr := strings.TrimSuffix(strings.TrimSuffix(s, "s"), unit)
+				num, err := strconv.Atoi(numStr)
+				if err != nil {
+					num = 1
+				}
+				if negative {
+					num = -num
+				}
+				return unitToDuration(unit, num), nil
+			}
+		}
+		return 0, fmt.Errorf("invalid relative time: %s", s)
+	}
+
+	num, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, err
+	}
+
+	if negative {
+		num = -num
+	}
+
+	unit := strings.TrimSuffix(parts[1], "s")
+	return unitToDuration(unit, num), nil
+}
+
+func unitToDuration(unit string, num int) time.Duration {
+	switch unit {
+	case "second":
+		return time.Duration(num) * time.Second
+	case "minute":
+		return time.Duration(num) * time.Minute
+	case "hour":
+		return time.Duration(num) * time.Hour
+	case "day":
+		return time.Duration(num) * 24 * time.Hour
+	case "week":
+		return time.Duration(num) * 7 * 24 * time.Hour
+	case "month":
+		return time.Duration(num) * 30 * 24 * time.Hour
+	case "year":
+		return time.Duration(num) * 365 * 24 * time.Hour
+	default:
+		return 0
+	}
+}
+
+// Helper function to parse interval strings (like P1D, PT1H)
+func parseInterval(s string) (time.Duration, error) {
+	s = strings.ToUpper(strings.TrimSpace(s))
+
+	// ISO 8601 duration format
+	if strings.HasPrefix(s, "P") {
+		return parseISO8601Duration(s)
+	}
+
+	// Try parsing as relative time
+	return parseRelativeTime(s)
+}
+
+func parseISO8601Duration(s string) (time.Duration, error) {
+	s = strings.TrimPrefix(s, "P")
+	var duration time.Duration
+	inTime := false
+
+	for len(s) > 0 {
+		if s[0] == 'T' {
+			inTime = true
+			s = s[1:]
+			continue
+		}
+
+		// Find the number
+		numEnd := 0
+		for numEnd < len(s) && (s[numEnd] >= '0' && s[numEnd] <= '9') {
+			numEnd++
+		}
+
+		if numEnd == 0 || numEnd >= len(s) {
+			break
+		}
+
+		num, _ := strconv.Atoi(s[:numEnd])
+		unit := s[numEnd]
+		s = s[numEnd+1:]
+
+		if inTime {
+			switch unit {
+			case 'H':
+				duration += time.Duration(num) * time.Hour
+			case 'M':
+				duration += time.Duration(num) * time.Minute
+			case 'S':
+				duration += time.Duration(num) * time.Second
+			}
+		} else {
+			switch unit {
+			case 'Y':
+				duration += time.Duration(num) * 365 * 24 * time.Hour
+			case 'M':
+				duration += time.Duration(num) * 30 * 24 * time.Hour
+			case 'W':
+				duration += time.Duration(num) * 7 * 24 * time.Hour
+			case 'D':
+				duration += time.Duration(num) * 24 * time.Hour
+			}
+		}
+	}
+
+	return duration, nil
+}
+
+// Helper function to convert PHP date format to Go format
+func phpToGoDateFormat(format string) string {
+	replacements := map[string]string{
+		"Y": "2006",
+		"y": "06",
+		"m": "01",
+		"n": "1",
+		"d": "02",
+		"j": "2",
+		"H": "15",
+		"h": "03",
+		"G": "15",
+		"g": "3",
+		"i": "04",
+		"s": "05",
+		"A": "PM",
+		"a": "pm",
+		"M": "Jan",
+		"F": "January",
+		"D": "Mon",
+		"l": "Monday",
+	}
+
+	result := format
+	for php, golang := range replacements {
+		result = strings.ReplaceAll(result, php, golang)
+	}
+	return result
+}
+
+// Helper function to parse various date formats
+func parseDateTime(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+
+	// Handle relative time expressions
+	lower := strings.ToLower(s)
+	if lower == "now" {
+		return time.Now(), nil
+	}
+	if lower == "today" {
+		now := time.Now()
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), nil
+	}
+	if lower == "tomorrow" {
+		now := time.Now().AddDate(0, 0, 1)
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), nil
+	}
+	if lower == "yesterday" {
+		now := time.Now().AddDate(0, 0, -1)
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), nil
+	}
+
+	// Handle relative modifiers
+	if strings.HasPrefix(lower, "+") || strings.HasPrefix(lower, "-") {
+		duration, err := parseRelativeTime(lower)
+		if err == nil {
+			return time.Now().Add(duration), nil
+		}
+	}
+
+	// Try common formats
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02",
+		"02/01/2006",
+		"01/02/2006",
+		"02-01-2006",
+		"Jan 02, 2006",
+		"January 02, 2006",
+		time.RFC3339,
+		time.RFC1123,
+		time.RFC822,
+	}
+
+	for _, format := range formats {
+		if t, err := time.Parse(format, s); err == nil {
+			return t, nil
+		}
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date: %s", s)
 }

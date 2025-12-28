@@ -149,14 +149,14 @@ XML Support (for RSS/Atom feeds, XML-RPC):
 Date/Time Enhancements:
   [ ] DateTime class and methods
   [ ] DateTimeZone class
-  [ ] date_create() / date_format()
+  [X] date_create() / date_format()
   [X] strftime() / gmstrftime() - locale-aware formatting
   [X] timezone functions (timezone_identifiers_list, etc.)
 
 Filter/Validation Functions:
   [X] filter_var() - filter a variable
-  [ ] filter_input() - get and filter input
-  [ ] filter_var_array() / filter_input_array()
+  [X] filter_input() - get and filter input
+  [X] filter_var_array() / filter_input_array()
   [ ] FILTER_* constants (FILTER_VALIDATE_EMAIL, etc.)
 
 Additional Encoding Functions:
