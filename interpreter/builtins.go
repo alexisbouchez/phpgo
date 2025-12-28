@@ -201,6 +201,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinInArray
 	case "array_key_exists":
 		return builtinArrayKeyExists
+	case "array_key_first":
+		return builtinArrayKeyFirst
+	case "array_key_last":
+		return builtinArrayKeyLast
+	case "array_is_list":
+		return builtinArrayIsList
 	case "array_map":
 		return i.builtinArrayMap
 	case "array_filter":
@@ -243,6 +249,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinPow
 	case "sqrt":
 		return builtinSqrt
+	case "fdiv":
+		return builtinFdiv
 	case "rand":
 		return builtinRand
 	case "mt_rand":
@@ -1772,6 +1780,56 @@ func builtinArrayKeyExists(args ...runtime.Value) runtime.Value {
 	return runtime.FALSE
 }
 
+func builtinArrayKeyFirst(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NULL
+	}
+	if len(arr.Keys) == 0 {
+		return runtime.NULL
+	}
+	return arr.Keys[0]
+}
+
+func builtinArrayKeyLast(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NULL
+	}
+	if len(arr.Keys) == 0 {
+		return runtime.NULL
+	}
+	return arr.Keys[len(arr.Keys)-1]
+}
+
+func builtinArrayIsList(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// An array is a list if it has sequential integer keys starting from 0
+	for i, key := range arr.Keys {
+		intKey, ok := key.(*runtime.Int)
+		if !ok {
+			return runtime.FALSE
+		}
+		if intKey.Value != int64(i) {
+			return runtime.FALSE
+		}
+	}
+	return runtime.TRUE
+}
+
 func (i *Interpreter) builtinArrayMap(args ...runtime.Value) runtime.Value {
 	if len(args) < 2 {
 		return runtime.NewArray()
@@ -2288,6 +2346,25 @@ func builtinSqrt(args ...runtime.Value) runtime.Value {
 		return runtime.NewFloat(0)
 	}
 	return runtime.NewFloat(math.Sqrt(args[0].ToFloat()))
+}
+
+func builtinFdiv(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewFloat(0)
+	}
+	dividend := args[0].ToFloat()
+	divisor := args[1].ToFloat()
+	// fdiv performs floating-point division, handling division by zero as INF
+	if divisor == 0 {
+		if dividend == 0 {
+			return runtime.NewFloat(math.NaN())
+		}
+		if dividend > 0 {
+			return runtime.NewFloat(math.Inf(1))
+		}
+		return runtime.NewFloat(math.Inf(-1))
+	}
+	return runtime.NewFloat(dividend / divisor)
 }
 
 func builtinRand(args ...runtime.Value) runtime.Value {
