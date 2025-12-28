@@ -3305,3 +3305,208 @@ func TestReflectionClassAbstract(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// strict_types
+
+func TestStrictTypesIntValid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function addInt(int $a, int $b): int {
+		return $a + $b;
+	}
+	echo addInt(1, 2);
+	`
+	expected := "3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesIntInvalid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function addInt(int $a, int $b): int {
+		return $a + $b;
+	}
+	echo addInt("1", 2);
+	`
+	result := evalOutput(input)
+	if !strings.Contains(result, "must be of type int") {
+		t.Errorf("expected type error, got %q", result)
+	}
+}
+
+func TestStrictTypesStringValid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function greet(string $name): string {
+		return "Hello, " . $name;
+	}
+	echo greet("World");
+	`
+	expected := "Hello, World"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesStringInvalid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function greet(string $name): string {
+		return "Hello, " . $name;
+	}
+	echo greet(123);
+	`
+	result := evalOutput(input)
+	if !strings.Contains(result, "must be of type string") {
+		t.Errorf("expected type error, got %q", result)
+	}
+}
+
+func TestStrictTypesBoolValid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function check(bool $flag): string {
+		return $flag ? "yes" : "no";
+	}
+	echo check(true);
+	`
+	expected := "yes"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesArrayValid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function getFirst(array $arr): mixed {
+		return $arr[0];
+	}
+	echo getFirst([10, 20, 30]);
+	`
+	expected := "10"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesNullable(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function maybeInt(?int $n): string {
+		return $n === null ? "null" : strval($n);
+	}
+	echo maybeInt(null) . "," . maybeInt(42);
+	`
+	expected := "null,42"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesNullableInvalid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	function requireInt(int $n): int {
+		return $n;
+	}
+	echo requireInt(null);
+	`
+	result := evalOutput(input)
+	if !strings.Contains(result, "null given") {
+		t.Errorf("expected type error for null, got %q", result)
+	}
+}
+
+func TestStrictTypesMethodCall(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	class Calculator {
+		public function add(int $a, int $b): int {
+			return $a + $b;
+		}
+	}
+	$calc = new Calculator();
+	echo $calc->add(5, 3);
+	`
+	expected := "8"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesMethodCallInvalid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	class Calculator {
+		public function add(int $a, int $b): int {
+			return $a + $b;
+		}
+	}
+	$calc = new Calculator();
+	echo $calc->add("5", 3);
+	`
+	result := evalOutput(input)
+	if !strings.Contains(result, "must be of type int") {
+		t.Errorf("expected type error, got %q", result)
+	}
+}
+
+func TestStrictTypesDisabled(t *testing.T) {
+	// Without strict_types, type coercion should happen
+	input := `<?php
+	function addInt(int $a, int $b): int {
+		return $a + $b;
+	}
+	echo addInt("5", "3");
+	`
+	expected := "8"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesClassType(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	class User {
+		public string $name;
+		public function __construct(string $n) { $this->name = $n; }
+	}
+	function greetUser(User $user): string {
+		return "Hello, " . $user->name;
+	}
+	$u = new User("Alice");
+	echo greetUser($u);
+	`
+	expected := "Hello, Alice"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestStrictTypesClassTypeInvalid(t *testing.T) {
+	input := `<?php
+	declare(strict_types=1);
+	class User {}
+	function greetUser(User $user): string {
+		return "Hello";
+	}
+	echo greetUser("not a user");
+	`
+	result := evalOutput(input)
+	if !strings.Contains(result, "must be of type User") {
+		t.Errorf("expected type error, got %q", result)
+	}
+}

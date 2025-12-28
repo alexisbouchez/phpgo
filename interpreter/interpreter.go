@@ -28,6 +28,7 @@ type Interpreter struct {
 	useFunctions     map[string]string // use function aliases
 	useConstants     map[string]string // use const aliases
 	currentFuncArgs  []runtime.Value   // Arguments passed to current function
+	strictTypes      bool              // Whether strict_types is enabled
 }
 
 // New creates a new interpreter.
@@ -204,6 +205,8 @@ func (i *Interpreter) evalStmt(stmt ast.Stmt) runtime.Value {
 		return i.evalUseDecl(s)
 	case *ast.ConstDecl:
 		return i.evalConstDecl(s)
+	case *ast.DeclareStmt:
+		return i.evalDeclare(s)
 	default:
 		return runtime.NewError(fmt.Sprintf("unknown statement type: %T", stmt))
 	}
@@ -1182,6 +1185,21 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 	// Bind parameters with named argument support
 	i.bindParams(env, oldEnv, fn.Params, fn.Defaults, fn.Variadic, args)
 
+	// Type checking in strict mode
+	if i.strictTypes && len(fn.ParamTypes) > 0 {
+		for idx, param := range fn.Params {
+			if idx < len(fn.ParamTypes) && fn.ParamTypes[idx] != "" {
+				val, _ := env.Get(param)
+				nullable := idx < len(fn.ParamNullable) && fn.ParamNullable[idx]
+				if err := i.checkType(val, fn.ParamTypes[idx], nullable, "$"+param); err != nil {
+					i.env = oldEnv
+					i.currentFuncArgs = oldFuncArgs
+					return err
+				}
+			}
+		}
+	}
+
 	// If it's a generator, execute and collect yields
 	if fn.IsGenerator {
 		gen := runtime.NewGenerator()
@@ -1496,6 +1514,22 @@ func (i *Interpreter) evalMethodCall(e *ast.MethodCallExpr) runtime.Value {
 	// Bind parameters with named argument support
 	i.bindParams(env, oldEnv, method.Params, method.Defaults, method.Variadic, e.Args)
 
+	// Type checking in strict mode
+	if i.strictTypes && len(method.ParamTypes) > 0 {
+		for idx, param := range method.Params {
+			if idx < len(method.ParamTypes) && method.ParamTypes[idx] != "" {
+				val, _ := env.Get(param)
+				nullable := idx < len(method.ParamNullable) && method.ParamNullable[idx]
+				if err := i.checkType(val, method.ParamTypes[idx], nullable, "$"+param); err != nil {
+					i.env = oldEnv
+					i.currentClass = oldClass
+					i.currentThis = oldThis
+					return err
+				}
+			}
+		}
+	}
+
 	// Execute body
 	var result runtime.Value = runtime.NULL
 	if block, ok := method.Body.(*ast.BlockStmt); ok {
@@ -1523,6 +1557,141 @@ func (i *Interpreter) findMethod(class *runtime.Class, name string) (*runtime.Me
 		return i.findMethod(class.Parent, name)
 	}
 	return nil, nil
+}
+
+// getTypeName extracts the type name from a TypeExpr
+func (i *Interpreter) getTypeName(te *ast.TypeExpr) string {
+	if te == nil || te.Type == nil {
+		return ""
+	}
+	switch t := te.Type.(type) {
+	case *ast.SimpleType:
+		return t.Name
+	case *ast.UnionType:
+		// For union types, just return the first type for now
+		if len(t.Types) > 0 {
+			return i.getTypeName(&ast.TypeExpr{Type: t.Types[0]})
+		}
+	case *ast.IntersectionType:
+		// For intersection types, just return the first type for now
+		if len(t.Types) > 0 {
+			return i.getTypeName(&ast.TypeExpr{Type: t.Types[0]})
+		}
+	}
+	return ""
+}
+
+// checkType validates that a value matches the expected type
+// Returns nil if valid, or an error message if not
+func (i *Interpreter) checkType(value runtime.Value, expectedType string, nullable bool, paramName string) *runtime.Error {
+	if expectedType == "" {
+		return nil // No type hint, anything is allowed
+	}
+
+	// Check for null
+	if _, isNull := value.(*runtime.Null); isNull {
+		if nullable {
+			return nil
+		}
+		return runtime.NewError(fmt.Sprintf("Argument %s must be of type %s, null given", paramName, expectedType))
+	}
+
+	// Normalize type name to lowercase for built-in types
+	typeLower := strings.ToLower(expectedType)
+
+	switch typeLower {
+	case "int", "integer":
+		if _, ok := value.(*runtime.Int); !ok {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type int, %s given", paramName, value.Type()))
+		}
+	case "float", "double":
+		switch value.(type) {
+		case *runtime.Float:
+			// OK
+		case *runtime.Int:
+			// In strict mode, int is not allowed for float
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type float, int given", paramName))
+		default:
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type float, %s given", paramName, value.Type()))
+		}
+	case "string":
+		if _, ok := value.(*runtime.String); !ok {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type string, %s given", paramName, value.Type()))
+		}
+	case "bool", "boolean":
+		if _, ok := value.(*runtime.Bool); !ok {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type bool, %s given", paramName, value.Type()))
+		}
+	case "array":
+		if _, ok := value.(*runtime.Array); !ok {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type array, %s given", paramName, value.Type()))
+		}
+	case "object":
+		if _, ok := value.(*runtime.Object); !ok {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type object, %s given", paramName, value.Type()))
+		}
+	case "callable":
+		// Accept closures, builtins, or objects with __invoke
+		switch v := value.(type) {
+		case *runtime.Function, *runtime.Builtin:
+			// OK
+		case *runtime.Object:
+			if _, exists := v.Class.Methods["__invoke"]; !exists {
+				return runtime.NewError(fmt.Sprintf("Argument %s must be of type callable, object given", paramName))
+			}
+		default:
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type callable, %s given", paramName, value.Type()))
+		}
+	case "iterable":
+		// Accept arrays or objects implementing Iterator
+		switch v := value.(type) {
+		case *runtime.Array:
+			// OK
+		case *runtime.Object:
+			if !i.implementsInterface(v.Class, "Iterator") && !i.implementsInterface(v.Class, "Traversable") {
+				return runtime.NewError(fmt.Sprintf("Argument %s must be of type iterable, object given", paramName))
+			}
+		default:
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type iterable, %s given", paramName, value.Type()))
+		}
+	case "mixed":
+		// Anything is allowed
+		return nil
+	case "void":
+		// void is only for return types, but if used for param it should fail
+		return runtime.NewError(fmt.Sprintf("Argument %s cannot be of type void", paramName))
+	default:
+		// Class/interface type
+		obj, ok := value.(*runtime.Object)
+		if !ok {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type %s, %s given", paramName, expectedType, value.Type()))
+		}
+		// Check if object is instance of expected class
+		if !i.isInstanceOf(obj, expectedType) {
+			return runtime.NewError(fmt.Sprintf("Argument %s must be of type %s, %s given", paramName, expectedType, obj.Class.Name))
+		}
+	}
+
+	return nil
+}
+
+// isInstanceOf checks if an object is an instance of a class or interface
+func (i *Interpreter) isInstanceOf(obj *runtime.Object, className string) bool {
+	// Check class hierarchy
+	class := obj.Class
+	for class != nil {
+		if class.Name == className {
+			return true
+		}
+		// Check interfaces
+		for _, iface := range class.Interfaces {
+			if iface.Name == className {
+				return true
+			}
+		}
+		class = class.Parent
+	}
+	return false
 }
 
 // checkMethodVisibility checks if a method is accessible from the current context
@@ -2302,6 +2471,8 @@ func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
 	}
 
 	params := make([]string, len(s.Params))
+	paramTypes := make([]string, len(s.Params))
+	paramNullable := make([]bool, len(s.Params))
 	defaults := make([]runtime.Value, len(s.Params))
 	variadic := false
 	for idx, p := range s.Params {
@@ -2312,16 +2483,31 @@ func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
 		if p.Variadic {
 			variadic = true
 		}
+		if p.Type != nil {
+			paramTypes[idx] = i.getTypeName(p.Type)
+			paramNullable[idx] = p.Type.Nullable
+		}
+	}
+
+	var returnType string
+	var returnNullable bool
+	if s.ReturnType != nil {
+		returnType = i.getTypeName(s.ReturnType)
+		returnNullable = s.ReturnType.Nullable
 	}
 
 	fn := &runtime.Function{
-		Name:        funcName,
-		Params:      params,
-		Defaults:    defaults,
-		Variadic:    variadic,
-		IsGenerator: containsYield(s.Body),
-		Body:        s.Body,
-		Env:         i.env,
+		Name:           funcName,
+		Params:         params,
+		ParamTypes:     paramTypes,
+		ParamNullable:  paramNullable,
+		Defaults:       defaults,
+		Variadic:       variadic,
+		IsGenerator:    containsYield(s.Body),
+		Body:           s.Body,
+		Env:            i.env,
+		ReturnType:     returnType,
+		ReturnNullable: returnNullable,
 	}
 
 	i.env.DefineFunction(funcName, fn)
@@ -2520,6 +2706,8 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 				}
 			}
 			params := make([]string, len(m.Params))
+			paramTypes := make([]string, len(m.Params))
+			paramNullable := make([]bool, len(m.Params))
 			defaults := make([]runtime.Value, len(m.Params))
 			variadic := false
 			var promotedParams []runtime.PromotedParam
@@ -2530,6 +2718,10 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 				}
 				if p.Variadic {
 					variadic = true
+				}
+				if p.Type != nil {
+					paramTypes[idx] = i.getTypeName(p.Type)
+					paramNullable[idx] = p.Type.Nullable
 				}
 				// Constructor property promotion
 				if p.Visibility != 0 {
@@ -2543,9 +2735,17 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 					promotedParams = append(promotedParams, promoted)
 				}
 			}
+			var returnType string
+			var returnNullable bool
+			if m.ReturnType != nil {
+				returnType = i.getTypeName(m.ReturnType)
+				returnNullable = m.ReturnType.Nullable
+			}
 			method := &runtime.Method{
 				Name:           m.Name.Name,
 				Params:         params,
+				ParamTypes:     paramTypes,
+				ParamNullable:  paramNullable,
 				Defaults:       defaults,
 				Variadic:       variadic,
 				PromotedParams: promotedParams,
@@ -2556,6 +2756,8 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 				IsStatic:       m.Modifiers != nil && m.Modifiers.Static,
 				IsAbstract:     m.Modifiers != nil && m.Modifiers.Abstract,
 				IsFinal:        m.Modifiers != nil && m.Modifiers.Final,
+				ReturnType:     returnType,
+				ReturnNullable: returnNullable,
 			}
 			class.Methods[m.Name.Name] = method
 
@@ -2718,6 +2920,30 @@ func (i *Interpreter) evalConstDecl(s *ast.ConstDecl) runtime.Value {
 		val := i.evalExpr(c.Value)
 		i.env.DefineConstant(c.Name.Name, val)
 	}
+	return runtime.NULL
+}
+
+// evalDeclare handles declare statements
+func (i *Interpreter) evalDeclare(s *ast.DeclareStmt) runtime.Value {
+	for _, dir := range s.Directives {
+		name := dir.Name.Name
+		val := i.evalExpr(dir.Value)
+
+		switch name {
+		case "strict_types":
+			i.strictTypes = val.ToBool()
+		case "ticks":
+			// Ticks are not implemented yet
+		case "encoding":
+			// Encoding declarations are not implemented yet
+		}
+	}
+
+	// If there's a body, execute it with the declare settings
+	if s.Body != nil {
+		return i.evalStmt(s.Body)
+	}
+
 	return runtime.NULL
 }
 

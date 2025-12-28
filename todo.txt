@@ -3,5 +3,4 @@ HIGH PRIORITY
 MEDIUM PRIORITY
 
 LOWER PRIORITY
-- Proper type enforcement (strict_types)
 - Attributes

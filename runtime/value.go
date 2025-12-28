@@ -366,8 +366,10 @@ type PromotedParam struct {
 type Method struct {
 	Name           string
 	Params         []string
-	Defaults       []Value // Default values for parameters
-	Variadic       bool    // Last param is variadic (...$args)
+	ParamTypes     []string // Type hints for parameters (empty string = no type)
+	ParamNullable  []bool   // Whether parameter allows null
+	Defaults       []Value  // Default values for parameters
+	Variadic       bool     // Last param is variadic (...$args)
 	PromotedParams []PromotedParam
 	Body           interface{} // Will be *ast.BlockStmt
 	IsPublic       bool
@@ -376,6 +378,8 @@ type Method struct {
 	IsStatic       bool
 	IsAbstract     bool
 	IsFinal        bool
+	ReturnType     string // Return type hint
+	ReturnNullable bool   // Whether return allows null
 }
 
 type Interface struct {
@@ -394,13 +398,17 @@ type Trait struct {
 // Function
 
 type Function struct {
-	Name        string
-	Params      []string
-	Defaults    []Value // Default values for each parameter (nil if no default)
-	Variadic    bool    // Last param is variadic (...$args)
-	IsGenerator bool    // Function contains yield
-	Body        interface{} // *ast.BlockStmt
-	Env         *Environment
+	Name           string
+	Params         []string
+	ParamTypes     []string // Type hints for parameters (empty string = no type)
+	ParamNullable  []bool   // Whether parameter allows null
+	Defaults       []Value  // Default values for each parameter (nil if no default)
+	Variadic       bool     // Last param is variadic (...$args)
+	IsGenerator    bool     // Function contains yield
+	Body           interface{} // *ast.BlockStmt
+	Env            *Environment
+	ReturnType     string // Return type hint
+	ReturnNullable bool   // Whether return allows null
 }
 
 func (f *Function) Type() string    { return "object" } // Closure is an object in PHP
