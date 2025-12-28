@@ -237,6 +237,18 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinArraySum
 	case "array_product":
 		return builtinArrayProduct
+	case "reset":
+		return builtinReset
+	case "current", "pos":
+		return builtinCurrent
+	case "next":
+		return builtinNext
+	case "prev":
+		return builtinPrev
+	case "end":
+		return builtinEnd
+	case "key":
+		return builtinKey
 	case "range":
 		return builtinRange
 	case "sort":
@@ -2219,6 +2231,94 @@ func builtinArrayProduct(args ...runtime.Value) runtime.Value {
 		return runtime.NewFloat(product)
 	}
 	return runtime.NewInt(int64(product))
+}
+
+func builtinReset(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	arr.Pointer = 0
+	if len(arr.Keys) == 0 {
+		return runtime.FALSE
+	}
+	return arr.Elements[arr.Keys[0]]
+}
+
+func builtinCurrent(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	if arr.Pointer < 0 || arr.Pointer >= len(arr.Keys) {
+		return runtime.FALSE
+	}
+	return arr.Elements[arr.Keys[arr.Pointer]]
+}
+
+func builtinNext(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	arr.Pointer++
+	if arr.Pointer >= len(arr.Keys) {
+		return runtime.FALSE
+	}
+	return arr.Elements[arr.Keys[arr.Pointer]]
+}
+
+func builtinPrev(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	arr.Pointer--
+	if arr.Pointer < 0 {
+		return runtime.FALSE
+	}
+	return arr.Elements[arr.Keys[arr.Pointer]]
+}
+
+func builtinEnd(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+	if len(arr.Keys) == 0 {
+		return runtime.FALSE
+	}
+	arr.Pointer = len(arr.Keys) - 1
+	return arr.Elements[arr.Keys[arr.Pointer]]
+}
+
+func builtinKey(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NULL
+	}
+	if arr.Pointer < 0 || arr.Pointer >= len(arr.Keys) {
+		return runtime.NULL
+	}
+	return arr.Keys[arr.Pointer]
 }
 
 func builtinRange(args ...runtime.Value) runtime.Value {

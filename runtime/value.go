@@ -148,9 +148,10 @@ func (s *String) Inspect() string  { return fmt.Sprintf("string(%d) %q", len(s.V
 // Array
 
 type Array struct {
-	Elements map[Value]Value
-	Keys     []Value // Maintain insertion order
-	NextIndex int64  // For auto-indexing
+	Elements  map[Value]Value
+	Keys      []Value // Maintain insertion order
+	NextIndex int64   // For auto-indexing
+	Pointer   int     // Internal pointer for iteration
 }
 
 func NewArray() *Array {
@@ -158,6 +159,7 @@ func NewArray() *Array {
 		Elements:  make(map[Value]Value),
 		Keys:      make([]Value, 0),
 		NextIndex: 0,
+		Pointer:   0,
 	}
 }
 
