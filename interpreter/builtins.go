@@ -297,6 +297,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinIniSet
 	case "version_compare":
 		return builtinVersionCompare
+	case "phpversion":
+		return builtinPhpversion
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -2341,6 +2343,12 @@ func compareVersionParts(parts1, parts2 []int) int {
 	}
 
 	return 0
+}
+
+func builtinPhpversion(args ...runtime.Value) runtime.Value {
+	// Return a version that indicates PHP 8.0 compatibility
+	// This is the version phpgo emulates
+	return runtime.NewString("8.0.0")
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
