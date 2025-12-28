@@ -1466,7 +1466,7 @@ func (i *Interpreter) evalMethodCall(e *ast.MethodCallExpr) runtime.Value {
 
 	// Handle Reflection* objects
 	switch obj.(type) {
-	case *ReflectionClass, *ReflectionMethod, *ReflectionProperty, *ReflectionFunction, *ReflectionParameter:
+	case *ReflectionClass, *ReflectionMethod, *ReflectionProperty, *ReflectionFunction, *ReflectionParameter, *ReflectionAttribute:
 		args := i.evalArgs(e.Args)
 		return i.callReflectionMethod(obj, methodName, args)
 	}
@@ -1724,6 +1724,23 @@ func (i *Interpreter) checkMethodVisibility(method *runtime.Method, callerClass,
 		}
 	}
 	return false
+}
+
+// parseAttributes converts AST attribute groups to runtime AttributeInstances
+func (i *Interpreter) parseAttributes(groups []*ast.AttributeGroup) []*runtime.AttributeInstance {
+	var attrs []*runtime.AttributeInstance
+	for _, group := range groups {
+		for _, attr := range group.Attrs {
+			instance := &runtime.AttributeInstance{
+				Name: attr.Name.Name,
+			}
+			if attr.Args != nil {
+				instance.Arguments = i.evalArgs(attr.Args)
+			}
+			attrs = append(attrs, instance)
+		}
+	}
+	return attrs
 }
 
 // checkPropertyVisibility checks if a property is accessible from the current context
@@ -2508,6 +2525,7 @@ func (i *Interpreter) evalFunctionDecl(s *ast.FunctionDecl) runtime.Value {
 		Env:            i.env,
 		ReturnType:     returnType,
 		ReturnNullable: returnNullable,
+		Attributes:     i.parseAttributes(s.Attrs),
 	}
 
 	i.env.DefineFunction(funcName, fn)
@@ -2589,6 +2607,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 		Constants:   make(map[string]runtime.Value),
 		IsAbstract:  s.Modifiers != nil && s.Modifiers.Abstract,
 		IsFinal:     s.Modifiers != nil && s.Modifiers.Final,
+		Attributes:  i.parseAttributes(s.Attrs),
 	}
 
 	// Handle extends
@@ -2673,6 +2692,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 			// Already handled above
 			continue
 		case *ast.PropertyDecl:
+			propAttrs := i.parseAttributes(m.Attrs)
 			for _, prop := range m.Props {
 				propName := prop.Var.Name.(*ast.Ident).Name
 				isStatic := m.Modifiers != nil && m.Modifiers.Static
@@ -2683,6 +2703,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 					IsPrivate:   m.Modifiers != nil && m.Modifiers.Private,
 					IsStatic:    isStatic,
 					IsReadonly:  m.Modifiers != nil && m.Modifiers.Readonly,
+					Attributes:  propAttrs,
 				}
 				if prop.Default != nil {
 					propDef.Default = i.evalExpr(prop.Default)
@@ -2758,6 +2779,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 				IsFinal:        m.Modifiers != nil && m.Modifiers.Final,
 				ReturnType:     returnType,
 				ReturnNullable: returnNullable,
+				Attributes:     i.parseAttributes(m.Attrs),
 			}
 			class.Methods[m.Name.Name] = method
 

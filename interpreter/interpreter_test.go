@@ -3510,3 +3510,139 @@ func TestStrictTypesClassTypeInvalid(t *testing.T) {
 		t.Errorf("expected type error, got %q", result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Attributes
+
+func TestAttributeOnClass(t *testing.T) {
+	input := `<?php
+	#[Entity]
+	class User {}
+	$ref = new ReflectionClass("User");
+	$attrs = $ref->getAttributes();
+	echo count($attrs) . ":" . $attrs[0]->getName();
+	`
+	expected := "1:Entity"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestAttributeWithArguments(t *testing.T) {
+	input := `<?php
+	#[Route("/api/users", methods: ["GET", "POST"])]
+	class UserController {}
+	$ref = new ReflectionClass("UserController");
+	$attrs = $ref->getAttributes();
+	$args = $attrs[0]->getArguments();
+	echo $args[0];
+	`
+	expected := "/api/users"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestAttributeOnMethod(t *testing.T) {
+	input := `<?php
+	class Controller {
+		#[Route("/index")]
+		public function index() {}
+	}
+	$ref = new ReflectionMethod("Controller", "index");
+	$attrs = $ref->getAttributes();
+	echo count($attrs) . ":" . $attrs[0]->getName();
+	`
+	expected := "1:Route"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestAttributeOnProperty(t *testing.T) {
+	input := `<?php
+	class Entity {
+		#[Column(type: "string", length: 255)]
+		public $name;
+	}
+	$ref = new ReflectionProperty("Entity", "name");
+	$attrs = $ref->getAttributes();
+	echo count($attrs) . ":" . $attrs[0]->getName();
+	`
+	expected := "1:Column"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestAttributeOnFunction(t *testing.T) {
+	input := `<?php
+	#[Deprecated("Use newFunc instead")]
+	function oldFunc() {}
+	$ref = new ReflectionFunction("oldFunc");
+	$attrs = $ref->getAttributes();
+	echo count($attrs) . ":" . $attrs[0]->getName();
+	`
+	expected := "1:Deprecated"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestMultipleAttributes(t *testing.T) {
+	input := `<?php
+	#[Entity]
+	#[Table("users")]
+	class User {}
+	$ref = new ReflectionClass("User");
+	$attrs = $ref->getAttributes();
+	echo count($attrs);
+	`
+	expected := "2"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestAttributeFiltering(t *testing.T) {
+	input := `<?php
+	#[Entity]
+	#[Table("users")]
+	#[Repository("UserRepository")]
+	class User {}
+	$ref = new ReflectionClass("User");
+	$attrs = $ref->getAttributes("Table");
+	echo count($attrs) . ":" . $attrs[0]->getName();
+	`
+	expected := "1:Table"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestAttributeNewInstance(t *testing.T) {
+	input := `<?php
+	class MyAttribute {
+		public $value;
+		public function __construct($v) { $this->value = $v; }
+	}
+	#[MyAttribute("test")]
+	class Target {}
+	$ref = new ReflectionClass("Target");
+	$attrs = $ref->getAttributes();
+	$instance = $attrs[0]->newInstance();
+	echo $instance->value;
+	`
+	expected := "test"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

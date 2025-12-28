@@ -76,6 +76,18 @@ func (r *ReflectionParameter) ToFloat() float64 { return 1.0 }
 func (r *ReflectionParameter) ToString() string { return "ReflectionParameter" }
 func (r *ReflectionParameter) Inspect() string  { return fmt.Sprintf("object(ReflectionParameter)#%p", r) }
 
+// ReflectionAttribute wraps an attribute instance for reflection
+type ReflectionAttribute struct {
+	Attribute *runtime.AttributeInstance
+}
+
+func (r *ReflectionAttribute) Type() string     { return "object" }
+func (r *ReflectionAttribute) ToBool() bool     { return true }
+func (r *ReflectionAttribute) ToInt() int64     { return 1 }
+func (r *ReflectionAttribute) ToFloat() float64 { return 1.0 }
+func (r *ReflectionAttribute) ToString() string { return "ReflectionAttribute" }
+func (r *ReflectionAttribute) Inspect() string  { return fmt.Sprintf("object(ReflectionAttribute)#%p", r) }
+
 // handleReflectionNew handles instantiation of Reflection* classes
 func (i *Interpreter) handleReflectionNew(className string, args []runtime.Value) runtime.Value {
 	switch className {
@@ -210,6 +222,8 @@ func (i *Interpreter) callReflectionMethod(obj runtime.Value, methodName string,
 		return i.callReflectionFunctionMethod(r, methodName, args)
 	case *ReflectionParameter:
 		return i.callReflectionParameterMethod(r, methodName, args)
+	case *ReflectionAttribute:
+		return i.callReflectionAttributeMethod(r, methodName, args)
 	}
 	return runtime.NULL
 }
@@ -362,6 +376,12 @@ func (i *Interpreter) callReflectionClassMethod(r *ReflectionClass, methodName s
 			parent = parent.Parent
 		}
 		return runtime.FALSE
+	case "getAttributes":
+		filterName := ""
+		if len(args) > 0 {
+			filterName = args[0].ToString()
+		}
+		return attributesToReflectionArray(r.Class.Attributes, filterName)
 	default:
 		return runtime.NewError(fmt.Sprintf("Call to undefined method ReflectionClass::%s()", methodName))
 	}
@@ -446,6 +466,12 @@ func (i *Interpreter) callReflectionMethodMethod(r *ReflectionMethod, methodName
 	case "setAccessible":
 		// In PHP 8+, this is a no-op but we accept it for compatibility
 		return runtime.NULL
+	case "getAttributes":
+		filterName := ""
+		if len(args) > 0 {
+			filterName = args[0].ToString()
+		}
+		return attributesToReflectionArray(r.Method.Attributes, filterName)
 	default:
 		return runtime.NewError(fmt.Sprintf("Call to undefined method ReflectionMethod::%s()", methodName))
 	}
@@ -510,6 +536,12 @@ func (i *Interpreter) callReflectionPropertyMethod(r *ReflectionProperty, method
 	case "setAccessible":
 		// In PHP 8+, this is a no-op but we accept it for compatibility
 		return runtime.NULL
+	case "getAttributes":
+		filterName := ""
+		if len(args) > 0 {
+			filterName = args[0].ToString()
+		}
+		return attributesToReflectionArray(r.Property.Attributes, filterName)
 	default:
 		return runtime.NewError(fmt.Sprintf("Call to undefined method ReflectionProperty::%s()", methodName))
 	}
@@ -573,6 +605,12 @@ func (i *Interpreter) callReflectionFunctionMethod(r *ReflectionFunction, method
 			}
 		}
 		return i.callUserFunction(r.Function, nil)
+	case "getAttributes":
+		filterName := ""
+		if len(args) > 0 {
+			filterName = args[0].ToString()
+		}
+		return attributesToReflectionArray(r.Function.Attributes, filterName)
 	default:
 		return runtime.NewError(fmt.Sprintf("Call to undefined method ReflectionFunction::%s()", methodName))
 	}
@@ -610,6 +648,46 @@ func (i *Interpreter) callReflectionParameterMethod(r *ReflectionParameter, meth
 	}
 }
 
+// ReflectionAttribute methods
+func (i *Interpreter) callReflectionAttributeMethod(r *ReflectionAttribute, methodName string, args []runtime.Value) runtime.Value {
+	switch methodName {
+	case "getName":
+		return runtime.NewString(r.Attribute.Name)
+	case "getArguments":
+		arr := runtime.NewArray()
+		for idx, arg := range r.Attribute.Arguments {
+			arr.Set(runtime.NewInt(int64(idx)), arg)
+		}
+		return arr
+	case "newInstance":
+		// Try to instantiate the attribute class
+		class, ok := i.env.GetClass(r.Attribute.Name)
+		if !ok {
+			return runtime.NewError(fmt.Sprintf("Attribute class %s does not exist", r.Attribute.Name))
+		}
+		return i.createInstance(class, r.Attribute.Arguments)
+	case "getTarget":
+		// Return Attribute::TARGET_ALL for now (63)
+		return runtime.NewInt(63)
+	case "isRepeated":
+		return runtime.FALSE
+	default:
+		return runtime.NewError(fmt.Sprintf("Call to undefined method ReflectionAttribute::%s()", methodName))
+	}
+}
+
+// attributesToReflectionArray converts attribute instances to an array of ReflectionAttribute
+func attributesToReflectionArray(attrs []*runtime.AttributeInstance, filterName string) *runtime.Array {
+	arr := runtime.NewArray()
+	for _, attr := range attrs {
+		if filterName != "" && attr.Name != filterName {
+			continue
+		}
+		arr.Set(nil, &ReflectionAttribute{Attribute: attr})
+	}
+	return arr
+}
+
 // createInstance creates a new instance of a class with constructor
 func (i *Interpreter) createInstance(class *runtime.Class, args []runtime.Value) runtime.Value {
 	if class.IsAbstract {
@@ -641,7 +719,7 @@ func (i *Interpreter) createInstance(class *runtime.Class, args []runtime.Value)
 // isReflectionClass checks if a class name is a Reflection class
 func isReflectionClass(name string) bool {
 	switch name {
-	case "ReflectionClass", "ReflectionMethod", "ReflectionProperty", "ReflectionFunction", "ReflectionParameter":
+	case "ReflectionClass", "ReflectionMethod", "ReflectionProperty", "ReflectionFunction", "ReflectionParameter", "ReflectionAttribute":
 		return true
 	}
 	return false

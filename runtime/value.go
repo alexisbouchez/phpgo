@@ -332,6 +332,12 @@ func (o *Object) SetProperty(name string, val Value) {
 // ----------------------------------------------------------------------------
 // Class (for object creation)
 
+// AttributeInstance represents an applied attribute
+type AttributeInstance struct {
+	Name      string  // Fully qualified attribute class name
+	Arguments []Value // Constructor arguments
+}
+
 type Class struct {
 	Name        string
 	Parent      *Class
@@ -342,6 +348,7 @@ type Class struct {
 	Constants   map[string]Value
 	IsAbstract  bool
 	IsFinal     bool
+	Attributes  []*AttributeInstance
 }
 
 type PropertyDef struct {
@@ -352,6 +359,7 @@ type PropertyDef struct {
 	IsPrivate  bool
 	IsStatic   bool
 	IsReadonly bool
+	Attributes []*AttributeInstance
 }
 
 // PromotedParam represents a constructor property promotion
@@ -380,6 +388,7 @@ type Method struct {
 	IsFinal        bool
 	ReturnType     string // Return type hint
 	ReturnNullable bool   // Whether return allows null
+	Attributes     []*AttributeInstance
 }
 
 type Interface struct {
@@ -409,6 +418,7 @@ type Function struct {
 	Env            *Environment
 	ReturnType     string // Return type hint
 	ReturnNullable bool   // Whether return allows null
+	Attributes     []*AttributeInstance
 }
 
 func (f *Function) Type() string    { return "object" } // Closure is an object in PHP
