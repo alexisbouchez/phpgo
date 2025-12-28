@@ -183,9 +183,9 @@ Object Serialization:
   [ ] __serialize() / __unserialize() magic methods (PHP 7.4+)
 
 Stream Functions:
-  [ ] stream_context_create() / stream_context_set_option()
-  [ ] stream_get_contents() / stream_copy_to_stream()
-  [ ] stream_filter_append() / stream_filter_prepend()
+  [X] stream_context_create() / stream_context_set_option()
+  [X] stream_get_contents() / stream_copy_to_stream()
+  [X] stream_filter_append() / stream_filter_prepend()
 
 LOWER PRIORITY - Nice to Have
 ==============================================
