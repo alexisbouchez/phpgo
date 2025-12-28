@@ -616,12 +616,32 @@ func (e *Error) ToString() string { return e.Message }
 func (e *Error) Inspect() string  { return fmt.Sprintf("%s: %s", e.Level, e.Message) }
 
 // ----------------------------------------------------------------------------
+// Resource (for file handles, etc.)
+
+type Resource struct {
+	ResType string      // "stream", "curl", etc.
+	Handle  interface{} // Actual resource (e.g., *os.File)
+	ID      int64       // Resource ID
+}
+
+func NewResource(resType string, handle interface{}, id int64) *Resource {
+	return &Resource{ResType: resType, Handle: handle, ID: id}
+}
+
+func (r *Resource) Type() string     { return "resource" }
+func (r *Resource) ToBool() bool     { return true }
+func (r *Resource) ToInt() int64     { return r.ID }
+func (r *Resource) ToFloat() float64 { return float64(r.ID) }
+func (r *Resource) ToString() string { return fmt.Sprintf("Resource id #%d", r.ID) }
+func (r *Resource) Inspect() string  { return fmt.Sprintf("resource(%s) #%d", r.ResType, r.ID) }
+
+// ----------------------------------------------------------------------------
 // Exception
 
 type Exception struct {
-	Class   *Class
-	Message string
-	Code    int64
+	Class    *Class
+	Message  string
+	Code     int64
 	Previous *Exception
 }
 

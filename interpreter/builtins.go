@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
 	"net/url"
 	"os"
@@ -476,6 +477,28 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinKrsort
 	case "array_splice":
 		return builtinArraySplice
+
+	// File stream functions
+	case "fopen":
+		return i.builtinFopen
+	case "fclose":
+		return builtinFclose
+	case "fread":
+		return builtinFread
+	case "fwrite", "fputs":
+		return builtinFwrite
+	case "fgets":
+		return builtinFgets
+	case "feof":
+		return builtinFeof
+	case "fseek":
+		return builtinFseek
+	case "ftell":
+		return builtinFtell
+	case "rewind":
+		return builtinRewind
+	case "unlink":
+		return builtinUnlink
 
 	default:
 		return nil
@@ -4394,4 +4417,279 @@ func builtinArraySplice(args ...runtime.Value) runtime.Value {
 	arr.NextIndex = nextIdx
 
 	return removed
+}
+
+// ----------------------------------------------------------------------------
+// File stream functions
+
+func (i *Interpreter) builtinFopen(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	mode := args[1].ToString()
+
+	// Open file with appropriate mode
+	var flag int
+	switch mode {
+	case "r":
+		flag = os.O_RDONLY
+	case "r+":
+		flag = os.O_RDWR
+	case "w":
+		flag = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	case "w+":
+		flag = os.O_RDWR | os.O_CREATE | os.O_TRUNC
+	case "a":
+		flag = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+	case "a+":
+		flag = os.O_RDWR | os.O_CREATE | os.O_APPEND
+	default:
+		return runtime.FALSE
+	}
+
+	file, err := os.OpenFile(filename, flag, 0666)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Create resource
+	resID := i.nextResourceID
+	i.nextResourceID++
+	resource := runtime.NewResource("stream", file, resID)
+	i.resources[resID] = resource
+
+	return resource
+}
+
+func builtinFclose(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		err := file.Close()
+		if err != nil {
+			return runtime.FALSE
+		}
+		return runtime.TRUE
+	}
+
+	return runtime.FALSE
+}
+
+func builtinFread(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	length := int(args[1].ToInt())
+	if length <= 0 {
+		return runtime.NewString("")
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		buf := make([]byte, length)
+		n, err := file.Read(buf)
+		if err != nil && n == 0 {
+			return runtime.FALSE
+		}
+		return runtime.NewString(string(buf[:n]))
+	}
+
+	return runtime.FALSE
+}
+
+func builtinFwrite(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	data := args[1].ToString()
+	length := len(data)
+
+	if len(args) >= 3 {
+		length = int(args[2].ToInt())
+		if length > len(data) {
+			length = len(data)
+		}
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		n, err := file.Write([]byte(data[:length]))
+		if err != nil {
+			return runtime.FALSE
+		}
+		return runtime.NewInt(int64(n))
+	}
+
+	return runtime.FALSE
+}
+
+func builtinFgets(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		// Read until newline or EOF
+		var line []byte
+		buf := make([]byte, 1)
+		for {
+			n, err := file.Read(buf)
+			if n == 0 || err != nil {
+				break
+			}
+			line = append(line, buf[0])
+			if buf[0] == '\n' {
+				break
+			}
+		}
+		if len(line) == 0 {
+			return runtime.FALSE
+		}
+		return runtime.NewString(string(line))
+	}
+
+	return runtime.FALSE
+}
+
+func builtinFeof(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.TRUE
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		// Try to read one byte and seek back
+		pos, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return runtime.TRUE
+		}
+
+		buf := make([]byte, 1)
+		n, _ := file.Read(buf)
+		file.Seek(pos, io.SeekStart)
+
+		if n == 0 {
+			return runtime.TRUE
+		}
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
+func builtinFseek(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(-1)
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.NewInt(-1)
+	}
+
+	offset := args[1].ToInt()
+	whence := io.SeekStart
+
+	if len(args) >= 3 {
+		w := int(args[2].ToInt())
+		switch w {
+		case 1:
+			whence = io.SeekCurrent
+		case 2:
+			whence = io.SeekEnd
+		}
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		_, err := file.Seek(offset, whence)
+		if err != nil {
+			return runtime.NewInt(-1)
+		}
+		return runtime.NewInt(0)
+	}
+
+	return runtime.NewInt(-1)
+}
+
+func builtinFtell(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		pos, err := file.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return runtime.FALSE
+		}
+		return runtime.NewInt(pos)
+	}
+
+	return runtime.FALSE
+}
+
+func builtinRewind(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	res, ok := args[0].(*runtime.Resource)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	if file, ok := res.Handle.(*os.File); ok {
+		_, err := file.Seek(0, io.SeekStart)
+		if err != nil {
+			return runtime.FALSE
+		}
+		return runtime.TRUE
+	}
+
+	return runtime.FALSE
+}
+
+func builtinUnlink(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	err := os.Remove(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.TRUE
 }

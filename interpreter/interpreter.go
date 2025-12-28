@@ -17,18 +17,20 @@ import (
 type Interpreter struct {
 	env              *runtime.Environment
 	output           strings.Builder
-	outputBuffers    []*strings.Builder // Stack of output buffers for ob_*
+	outputBuffers    []*strings.Builder  // Stack of output buffers for ob_*
 	staticVars       *runtime.StaticVars
-	currentClass     string          // Current class context for self/parent/static
-	currentThis      *runtime.Object // Current object for method calls
-	includedFiles    map[string]bool // Track files included with _once
-	currentDir       string          // Current directory for relative paths
-	currentNamespace string          // Current namespace (e.g., "App\Models")
-	useAliases       map[string]string // use aliases: alias -> fully qualified name
-	useFunctions     map[string]string // use function aliases
-	useConstants     map[string]string // use const aliases
-	currentFuncArgs  []runtime.Value   // Arguments passed to current function
-	strictTypes      bool              // Whether strict_types is enabled
+	currentClass     string              // Current class context for self/parent/static
+	currentThis      *runtime.Object     // Current object for method calls
+	includedFiles    map[string]bool     // Track files included with _once
+	currentDir       string              // Current directory for relative paths
+	currentNamespace string              // Current namespace (e.g., "App\Models")
+	useAliases       map[string]string   // use aliases: alias -> fully qualified name
+	useFunctions     map[string]string   // use function aliases
+	useConstants     map[string]string   // use const aliases
+	currentFuncArgs  []runtime.Value     // Arguments passed to current function
+	strictTypes      bool                // Whether strict_types is enabled
+	resources        map[int64]*runtime.Resource // Open resources (files, etc.)
+	nextResourceID   int64               // Next resource ID
 }
 
 // New creates a new interpreter.
@@ -37,13 +39,15 @@ func New() *Interpreter {
 	env.InitSuperglobals()
 	cwd, _ := os.Getwd()
 	i := &Interpreter{
-		env:           env,
-		staticVars:    runtime.NewStaticVars(),
-		includedFiles: make(map[string]bool),
-		currentDir:    cwd,
-		useAliases:    make(map[string]string),
-		useFunctions:  make(map[string]string),
-		useConstants:  make(map[string]string),
+		env:            env,
+		staticVars:     runtime.NewStaticVars(),
+		includedFiles:  make(map[string]bool),
+		currentDir:     cwd,
+		useAliases:     make(map[string]string),
+		useFunctions:   make(map[string]string),
+		useConstants:   make(map[string]string),
+		resources:      make(map[int64]*runtime.Resource),
+		nextResourceID: 1,
 	}
 	i.registerBuiltins()
 	return i
