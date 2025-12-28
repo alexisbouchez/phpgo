@@ -520,6 +520,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinMbSubstr
 	case "mb_strpos":
 		return builtinMbStrpos
+	case "mb_strtoupper":
+		return builtinMbStrtoupper
+	case "mb_strtolower":
+		return builtinMbStrtolower
 	case "substr_count":
 		return builtinSubstrCount
 	case "substr_compare":
@@ -5030,6 +5034,22 @@ func builtinMbStrpos(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+func builtinMbStrtoupper(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	return runtime.NewString(strings.ToUpper(str))
+}
+
+func builtinMbStrtolower(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	return runtime.NewString(strings.ToLower(str))
 }
 
 func builtinSubstrCount(args ...runtime.Value) runtime.Value {
