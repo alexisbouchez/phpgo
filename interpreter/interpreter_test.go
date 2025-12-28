@@ -2151,3 +2151,81 @@ func TestEvalCallUserFuncArrayMethod(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// func_get_args / func_num_args
+
+func TestFuncNumArgs(t *testing.T) {
+	input := `<?php
+	function test() {
+		return func_num_args();
+	}
+	echo test(1, 2, 3);
+	`
+	expected := "3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestFuncGetArgs(t *testing.T) {
+	input := `<?php
+	function test() {
+		$args = func_get_args();
+		return implode(',', $args);
+	}
+	echo test('a', 'b', 'c');
+	`
+	expected := "a,b,c"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestFuncGetArgsWithParams(t *testing.T) {
+	input := `<?php
+	function test($first, $second) {
+		return func_num_args() . ":" . implode(',', func_get_args());
+	}
+	echo test('x', 'y', 'z', 'w');
+	`
+	expected := "4:x,y,z,w"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestFuncGetArgsNestedCalls(t *testing.T) {
+	input := `<?php
+	function inner() {
+		return func_num_args();
+	}
+	function outer() {
+		$innerCount = inner(1, 2);
+		$outerArgs = func_get_args();
+		return $innerCount . ":" . count($outerArgs);
+	}
+	echo outer('a', 'b', 'c');
+	`
+	expected := "2:3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestFuncGetArgsEmpty(t *testing.T) {
+	input := `<?php
+	function test() {
+		return func_num_args();
+	}
+	echo test();
+	`
+	expected := "0"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

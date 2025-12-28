@@ -26,6 +26,7 @@ type Interpreter struct {
 	useAliases       map[string]string // use aliases: alias -> fully qualified name
 	useFunctions     map[string]string // use function aliases
 	useConstants     map[string]string // use const aliases
+	currentFuncArgs  []runtime.Value   // Arguments passed to current function
 }
 
 // New creates a new interpreter.
@@ -1079,6 +1080,9 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 	oldEnv := i.env
 	i.env = env
 
+	// Save old func args for nested calls
+	oldFuncArgs := i.currentFuncArgs
+
 	// Bind parameters with named argument support
 	i.bindParams(env, oldEnv, fn.Params, fn.Defaults, fn.Variadic, args)
 
@@ -1087,6 +1091,7 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 		gen := runtime.NewGenerator()
 		i.executeGenerator(fn.Body.(*ast.BlockStmt), gen)
 		i.env = oldEnv
+		i.currentFuncArgs = oldFuncArgs
 		return gen
 	}
 
@@ -1096,8 +1101,9 @@ func (i *Interpreter) callFunction(fn *runtime.Function, args *ast.ArgumentList)
 		result = i.evalBlock(block)
 	}
 
-	// Restore environment
+	// Restore environment and func args
 	i.env = oldEnv
+	i.currentFuncArgs = oldFuncArgs
 
 	// Unwrap return value
 	if ret, ok := result.(*runtime.ReturnValue); ok {
@@ -1235,6 +1241,9 @@ func (i *Interpreter) evalArgsInEnv(env *runtime.Environment, args *ast.Argument
 
 // bindParams binds arguments to parameters with named argument support
 func (i *Interpreter) bindParams(env, evalEnv *runtime.Environment, params []string, defaults []runtime.Value, variadic bool, args *ast.ArgumentList) {
+	// Track all evaluated args for func_get_args/func_num_args
+	var allArgs []runtime.Value
+
 	if args == nil {
 		// Use defaults for all params
 		for idx, param := range params {
@@ -1242,6 +1251,7 @@ func (i *Interpreter) bindParams(env, evalEnv *runtime.Environment, params []str
 				env.Set(param, defaults[idx])
 			}
 		}
+		i.currentFuncArgs = allArgs
 		return
 	}
 
@@ -1267,6 +1277,7 @@ func (i *Interpreter) bindParams(env, evalEnv *runtime.Environment, params []str
 			// Spread operator
 			if arr, ok := val.(*runtime.Array); ok {
 				for _, k := range arr.Keys {
+					allArgs = append(allArgs, arr.Elements[k])
 					if positionalIdx < len(params) {
 						isVariadicParam := variadic && positionalIdx == len(params)-1
 						if isVariadicParam {
@@ -1284,12 +1295,14 @@ func (i *Interpreter) bindParams(env, evalEnv *runtime.Environment, params []str
 		} else if arg.Name != nil {
 			// Named argument
 			name := arg.Name.Name
+			allArgs = append(allArgs, val)
 			if idx, ok := paramIndex[name]; ok {
 				bound[idx] = val
 				boundSet[idx] = true
 			}
 		} else {
 			// Positional argument
+			allArgs = append(allArgs, val)
 			if positionalIdx < len(params) {
 				isVariadicParam := variadic && positionalIdx == len(params)-1
 				if isVariadicParam {
@@ -1305,6 +1318,9 @@ func (i *Interpreter) bindParams(env, evalEnv *runtime.Environment, params []str
 		}
 	}
 	i.env = oldEnv
+
+	// Store all args for func_get_args/func_num_args
+	i.currentFuncArgs = allArgs
 
 	// Set params in env
 	for idx, param := range params {

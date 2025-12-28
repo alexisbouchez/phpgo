@@ -188,6 +188,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinCallUserFunc
 	case "call_user_func_array":
 		return i.builtinCallUserFuncArray
+	case "func_get_args":
+		return i.builtinFuncGetArgs
+	case "func_num_args":
+		return i.builtinFuncNumArgs
 
 	// Regex functions
 	case "preg_match":
@@ -1098,6 +1102,10 @@ func (i *Interpreter) callFunctionWithArgs(fn *runtime.Function, args []runtime.
 	oldEnv := i.env
 	i.env = env
 
+	// Save and set func args for func_get_args/func_num_args
+	oldFuncArgs := i.currentFuncArgs
+	i.currentFuncArgs = args
+
 	for idx, param := range fn.Params {
 		if idx < len(args) {
 			env.Set(param, args[idx])
@@ -1110,6 +1118,7 @@ func (i *Interpreter) callFunctionWithArgs(fn *runtime.Function, args []runtime.
 	}
 
 	i.env = oldEnv
+	i.currentFuncArgs = oldFuncArgs
 
 	if ret, ok := result.(*runtime.ReturnValue); ok {
 		return ret.Value
@@ -1634,6 +1643,18 @@ func (i *Interpreter) builtinCallUserFuncArray(args ...runtime.Value) runtime.Va
 	return i.callCallback(callback, callArgs)
 }
 
+func (i *Interpreter) builtinFuncGetArgs(args ...runtime.Value) runtime.Value {
+	result := runtime.NewArray()
+	for idx, arg := range i.currentFuncArgs {
+		result.Set(runtime.NewInt(int64(idx)), arg)
+	}
+	return result
+}
+
+func (i *Interpreter) builtinFuncNumArgs(args ...runtime.Value) runtime.Value {
+	return runtime.NewInt(int64(len(i.currentFuncArgs)))
+}
+
 // callCallback handles calling various callback types
 func (i *Interpreter) callCallback(callback runtime.Value, args []runtime.Value) runtime.Value {
 	switch cb := callback.(type) {
@@ -1705,9 +1726,11 @@ func (i *Interpreter) invokeMethodWithArgs(obj *runtime.Object, method *runtime.
 	oldEnv := i.env
 	oldClass := i.currentClass
 	oldThis := i.currentThis
+	oldFuncArgs := i.currentFuncArgs
 	i.env = env
 	i.currentClass = foundClass.Name
 	i.currentThis = obj
+	i.currentFuncArgs = args
 
 	// Bind parameters
 	for idx, param := range method.Params {
@@ -1736,6 +1759,7 @@ func (i *Interpreter) invokeMethodWithArgs(obj *runtime.Object, method *runtime.
 	i.env = oldEnv
 	i.currentClass = oldClass
 	i.currentThis = oldThis
+	i.currentFuncArgs = oldFuncArgs
 
 	if ret, ok := result.(*runtime.ReturnValue); ok {
 		return ret.Value
@@ -1748,8 +1772,10 @@ func (i *Interpreter) invokeStaticMethodWithArgs(class *runtime.Class, method *r
 	env := runtime.NewEnclosedEnvironment(i.env)
 	oldEnv := i.env
 	oldClass := i.currentClass
+	oldFuncArgs := i.currentFuncArgs
 	i.env = env
 	i.currentClass = foundClass.Name
+	i.currentFuncArgs = args
 
 	// Bind parameters
 	for idx, param := range method.Params {
@@ -1767,6 +1793,7 @@ func (i *Interpreter) invokeStaticMethodWithArgs(class *runtime.Class, method *r
 
 	i.env = oldEnv
 	i.currentClass = oldClass
+	i.currentFuncArgs = oldFuncArgs
 
 	if ret, ok := result.(*runtime.ReturnValue); ok {
 		return ret.Value
