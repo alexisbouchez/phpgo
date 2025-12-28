@@ -507,6 +507,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinKrsort
 	case "array_splice":
 		return builtinArraySplice
+	case "array_multisort":
+		return builtinArrayMultisort
 
 	// File stream functions
 	case "fopen":
@@ -4920,6 +4922,70 @@ func builtinArraySplice(args ...runtime.Value) runtime.Value {
 	arr.NextIndex = nextIdx
 
 	return removed
+}
+
+func builtinArrayMultisort(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	arr, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// For simplicity, implement basic single-array sorting
+	// Full implementation would handle multiple arrays and sort order flags
+
+	// Sort by value (ascending by default)
+	type kvPair struct {
+		key runtime.Value
+		val runtime.Value
+	}
+
+	pairs := make([]kvPair, 0, len(arr.Keys))
+	for _, key := range arr.Keys {
+		pairs = append(pairs, kvPair{key, arr.Elements[key]})
+	}
+
+	// Sort pairs by value
+	sort.SliceStable(pairs, func(i, j int) bool {
+		vi := pairs[i].val
+		vj := pairs[j].val
+
+		// Compare based on type
+		switch v1 := vi.(type) {
+		case *runtime.Int:
+			if v2, ok := vj.(*runtime.Int); ok {
+				return v1.Value < v2.Value
+			}
+		case *runtime.Float:
+			if v2, ok := vj.(*runtime.Float); ok {
+				return v1.Value < v2.Value
+			}
+		case *runtime.String:
+			if v2, ok := vj.(*runtime.String); ok {
+				return v1.Value < v2.Value
+			}
+		}
+		return false
+	})
+
+	// Rebuild array with sorted values (reindex)
+	newKeys := make([]runtime.Value, 0, len(pairs))
+	newElements := make(map[runtime.Value]runtime.Value)
+
+	for i, pair := range pairs {
+		newKey := runtime.NewInt(int64(i))
+		newKeys = append(newKeys, newKey)
+		newElements[newKey] = pair.val
+	}
+
+	arr.Keys = newKeys
+	arr.Elements = newElements
+	arr.NextIndex = int64(len(pairs))
+
+	return runtime.TRUE
 }
 
 // ----------------------------------------------------------------------------
