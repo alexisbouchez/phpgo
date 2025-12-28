@@ -143,8 +143,16 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinImplode
 	case "sprintf":
 		return builtinSprintf
+	case "printf":
+		return i.builtinPrintf
+	case "fprintf":
+		return i.builtinFprintf
 	case "vprintf":
 		return i.builtinVprintf
+	case "vsprintf":
+		return builtinVsprintf
+	case "flush":
+		return i.builtinFlush
 	case "str_repeat":
 		return builtinStrRepeat
 	case "substr_replace":
@@ -1075,6 +1083,89 @@ func (i *Interpreter) builtinVprintf(args ...runtime.Value) runtime.Value {
 	output := fmt.Sprintf(format, fmtArgs...)
 	i.writeOutput(output)
 	return runtime.NewInt(int64(len(output)))
+}
+
+func (i *Interpreter) builtinPrintf(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+	format := args[0].ToString()
+	fmtArgs := make([]interface{}, len(args)-1)
+	for j := 1; j < len(args); j++ {
+		switch v := args[j].(type) {
+		case *runtime.Int:
+			fmtArgs[j-1] = v.Value
+		case *runtime.Float:
+			fmtArgs[j-1] = v.Value
+		case *runtime.String:
+			fmtArgs[j-1] = v.Value
+		default:
+			fmtArgs[j-1] = args[j].ToString()
+		}
+	}
+	output := fmt.Sprintf(format, fmtArgs...)
+	i.writeOutput(output)
+	return runtime.NewInt(int64(len(output)))
+}
+
+func (i *Interpreter) builtinFprintf(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+	// First argument is the file handle (not fully supported, we'll just write to output)
+	// In a full implementation, we'd write to the file handle
+	format := args[1].ToString()
+	fmtArgs := make([]interface{}, len(args)-2)
+	for j := 2; j < len(args); j++ {
+		switch v := args[j].(type) {
+		case *runtime.Int:
+			fmtArgs[j-2] = v.Value
+		case *runtime.Float:
+			fmtArgs[j-2] = v.Value
+		case *runtime.String:
+			fmtArgs[j-2] = v.Value
+		default:
+			fmtArgs[j-2] = args[j].ToString()
+		}
+	}
+	output := fmt.Sprintf(format, fmtArgs...)
+	i.writeOutput(output)
+	return runtime.NewInt(int64(len(output)))
+}
+
+func builtinVsprintf(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("")
+	}
+	format := args[0].ToString()
+	argsArray, ok := args[1].(*runtime.Array)
+	if !ok {
+		return runtime.NewString("")
+	}
+
+	// Convert array to interface slice
+	fmtArgs := make([]interface{}, 0, len(argsArray.Keys))
+	for _, key := range argsArray.Keys {
+		val := argsArray.Elements[key]
+		switch v := val.(type) {
+		case *runtime.Int:
+			fmtArgs = append(fmtArgs, v.Value)
+		case *runtime.Float:
+			fmtArgs = append(fmtArgs, v.Value)
+		case *runtime.String:
+			fmtArgs = append(fmtArgs, v.Value)
+		default:
+			fmtArgs = append(fmtArgs, val.ToString())
+		}
+	}
+
+	return runtime.NewString(fmt.Sprintf(format, fmtArgs...))
+}
+
+func (i *Interpreter) builtinFlush(args ...runtime.Value) runtime.Value {
+	// In a full implementation, this would flush output buffers
+	// For now, this is a no-op as we write directly
+	return runtime.NULL
 }
 
 func builtinSubstrReplace(args ...runtime.Value) runtime.Value {
