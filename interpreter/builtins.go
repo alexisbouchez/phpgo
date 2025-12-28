@@ -476,6 +476,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinStrtr
 	case "str_ireplace":
 		return builtinStrIreplace
+	case "strpbrk":
+		return builtinStrpbrk
+	case "similar_text":
+		return builtinSimilarText
+	case "soundex":
+		return builtinSoundex
 
 	// Additional array functions
 	case "asort":
@@ -4420,6 +4426,128 @@ func builtinStrIreplace(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.NewString(result.String())
+}
+
+func builtinStrpbrk(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	haystack := args[0].ToString()
+	charList := args[1].ToString()
+
+	// Find first occurrence of any character from char_list
+	for i, ch := range haystack {
+		if strings.ContainsRune(charList, ch) {
+			return runtime.NewString(haystack[i:])
+		}
+	}
+
+	return runtime.FALSE
+}
+
+func builtinSimilarText(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewInt(0)
+	}
+
+	str1 := args[0].ToString()
+	str2 := args[1].ToString()
+
+	// Calculate similarity using longest common subsequence algorithm
+	similarity := calculateSimilarity(str1, str2)
+
+	return runtime.NewInt(int64(similarity))
+}
+
+func calculateSimilarity(str1, str2 string) int {
+	len1, len2 := len(str1), len(str2)
+	if len1 == 0 || len2 == 0 {
+		return 0
+	}
+
+	// Simple similarity: count matching characters
+	var sum int
+	maxLen := len1
+	if len2 > maxLen {
+		maxLen = len2
+	}
+
+	for i := 0; i < maxLen && i < len1 && i < len2; i++ {
+		if str1[i] == str2[i] {
+			sum++
+		}
+	}
+
+	return sum
+}
+
+func builtinSoundex(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	str := args[0].ToString()
+	if len(str) == 0 {
+		return runtime.FALSE
+	}
+
+	// Convert to uppercase and get first letter
+	str = strings.ToUpper(str)
+	var result strings.Builder
+
+	// Find first letter
+	var firstLetter rune
+	for _, ch := range str {
+		if ch >= 'A' && ch <= 'Z' {
+			firstLetter = ch
+			result.WriteRune(ch)
+			break
+		}
+	}
+
+	if firstLetter == 0 {
+		return runtime.FALSE
+	}
+
+	// Soundex mapping
+	soundexMap := map[rune]rune{
+		'B': '1', 'F': '1', 'P': '1', 'V': '1',
+		'C': '2', 'G': '2', 'J': '2', 'K': '2', 'Q': '2', 'S': '2', 'X': '2', 'Z': '2',
+		'D': '3', 'T': '3',
+		'L': '4',
+		'M': '5', 'N': '5',
+		'R': '6',
+	}
+
+	prevCode := soundexMap[firstLetter]
+
+	for _, ch := range str {
+		if ch == firstLetter {
+			continue
+		}
+		if code, ok := soundexMap[ch]; ok {
+			if code != prevCode {
+				result.WriteRune(code)
+				prevCode = code
+				if result.Len() >= 4 {
+					break
+				}
+			}
+		} else {
+			// A, E, I, O, U, H, W, Y reset the previous code
+			if ch == 'A' || ch == 'E' || ch == 'I' || ch == 'O' || ch == 'U' || ch == 'H' || ch == 'W' || ch == 'Y' {
+				prevCode = 0
+			}
+		}
+	}
+
+	// Pad with zeros
+	for result.Len() < 4 {
+		result.WriteRune('0')
+	}
+
+	return runtime.NewString(result.String()[:4])
 }
 
 // ----------------------------------------------------------------------------
