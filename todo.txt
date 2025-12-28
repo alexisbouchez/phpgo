@@ -1,0 +1,20 @@
+HIGH PRIORITY
+- Generators (yield/yield from)
+- Named arguments
+- Constructor property promotion
+- exit/die
+- Proper namespace resolution
+
+MEDIUM PRIORITY
+- call_user_func / call_user_func_array
+- func_get_args / func_num_args
+- Serialization (__sleep/__wakeup, serialize/unserialize)
+- ArrayAccess interface
+- Iterator/Traversable
+
+LOWER PRIORITY
+- Reflection API
+- More magic methods (__clone, __debugInfo)
+- Output buffering (ob_*)
+- Proper type enforcement (strict_types)
+- Attributes
