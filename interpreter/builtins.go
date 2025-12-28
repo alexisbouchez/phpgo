@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	goruntime "runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -301,6 +302,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinPhpversion
 	case "extension_loaded":
 		return builtinExtensionLoaded
+	case "memory_get_usage":
+		return builtinMemoryGetUsage
+	case "memory_get_peak_usage":
+		return builtinMemoryGetPeakUsage
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -2378,6 +2383,20 @@ func builtinExtensionLoaded(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+func builtinMemoryGetUsage(args ...runtime.Value) runtime.Value {
+	var m goruntime.MemStats
+	goruntime.ReadMemStats(&m)
+	// Return allocated memory in bytes
+	return runtime.NewInt(int64(m.Alloc))
+}
+
+func builtinMemoryGetPeakUsage(args ...runtime.Value) runtime.Value {
+	var m goruntime.MemStats
+	goruntime.ReadMemStats(&m)
+	// Return peak memory usage in bytes
+	return runtime.NewInt(int64(m.TotalAlloc))
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
