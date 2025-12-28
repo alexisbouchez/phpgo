@@ -39,14 +39,19 @@ type Interpreter struct {
 
 // HTTPContext represents HTTP request information
 type HTTPContext struct {
-	Method        string
-	URI          string
-	QueryString  string
-	Headers      map[string]string
-	Cookies      map[string]string
-	PostData     map[string]string
-	Files        map[string][]byte
-	ServerVars   map[string]string
+	Method          string
+	URI             string
+	QueryString     string
+	Headers         map[string]string
+	Cookies         map[string]string
+	PostData        map[string]string
+	Files           map[string][]byte
+	ServerVars      map[string]string
+	ResponseHeaders []string // Response headers to be sent
+	ResponseCode    int      // HTTP response code
+	HeadersSent     bool     // Whether headers have been sent
+	SessionID       string   // Current session ID
+	SessionStarted  bool     // Whether session has been started
 }
 
 // New creates a new interpreter.
@@ -67,11 +72,13 @@ func New() *Interpreter {
 		autoloadFuncs:  make([]runtime.Value, 0),
 		iniSettings:    make(map[string]string),
 		httpContext: &HTTPContext{
-			Headers:    make(map[string]string),
-			Cookies:    make(map[string]string),
-			PostData:   make(map[string]string),
-			Files:      make(map[string][]byte),
-			ServerVars: make(map[string]string),
+			Headers:         make(map[string]string),
+			Cookies:         make(map[string]string),
+			PostData:        make(map[string]string),
+			Files:           make(map[string][]byte),
+			ServerVars:      make(map[string]string),
+			ResponseHeaders: make([]string, 0),
+			ResponseCode:    200,
 		},
 	}
 	// Initialize default ini settings
@@ -2917,6 +2924,9 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 			variadic := false
 			var promotedParams []runtime.PromotedParam
 			for idx, p := range m.Params {
+				if p.Var == nil || p.Var.Name == nil {
+					return runtime.NewError(fmt.Sprintf("invalid parameter in method %s::%s", class.Name, m.Name.Name))
+				}
 				params[idx] = p.Var.Name.(*ast.Ident).Name
 				if p.Default != nil {
 					defaults[idx] = i.evalExpr(p.Default)
