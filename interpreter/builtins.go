@@ -2,6 +2,9 @@ package interpreter
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
+	"compress/zlib"
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/rand"
@@ -376,6 +379,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinObFlush
 	case "ob_clean":
 		return i.builtinObClean
+	case "ob_list_handlers":
+		return i.builtinObListHandlers
+	case "ob_get_status":
+		return i.builtinObGetStatus
 
 	// Misc functions
 	case "define":
@@ -540,6 +547,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinPasswordHash
 	case "password_verify":
 		return builtinPasswordVerify
+	case "openssl_random_pseudo_bytes":
+		return builtinOpensslRandomPseudoBytes
+	case "random_bytes":
+		return builtinRandomBytes
 	case "base64_encode":
 		return builtinBase64Encode
 	case "base64_decode":
@@ -556,6 +567,20 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinConvertUuencode
 	case "convert_uudecode":
 		return builtinConvertUudecode
+
+	// Compression functions
+	case "gzcompress":
+		return builtinGzcompress
+	case "gzuncompress":
+		return builtinGzuncompress
+	case "gzencode":
+		return builtinGzencode
+	case "gzdecode":
+		return builtinGzdecode
+	case "gzdeflate":
+		return builtinGzdeflate
+	case "gzinflate":
+		return builtinGzinflate
 
 	// Additional string functions
 	case "str_contains":
@@ -858,6 +883,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinInetPton
 	case "inet_ntop":
 		return builtinInetNtop
+	case "dns_get_record":
+		return builtinDnsGetRecord
+	case "checkdnsrr":
+		return builtinCheckdnsrr
+	case "getmxrr":
+		return builtinGetmxrr
 
 	default:
 		return nil
@@ -3313,6 +3344,55 @@ func (i *Interpreter) builtinObClean(args ...runtime.Value) runtime.Value {
 	return runtime.TRUE
 }
 
+func (i *Interpreter) builtinObListHandlers(args ...runtime.Value) runtime.Value {
+	arr := runtime.NewArray()
+	for idx := range i.outputBuffers {
+		// Default handler name
+		arr.Set(runtime.NewInt(int64(idx)), runtime.NewString("default output handler"))
+	}
+	return arr
+}
+
+func (i *Interpreter) builtinObGetStatus(args ...runtime.Value) runtime.Value {
+	fullStatus := false
+	if len(args) > 0 {
+		fullStatus = args[0].ToBool()
+	}
+
+	if len(i.outputBuffers) == 0 {
+		return runtime.FALSE
+	}
+
+	if fullStatus {
+		// Return array of all buffer statuses
+		arr := runtime.NewArray()
+		for idx, buf := range i.outputBuffers {
+			status := runtime.NewArray()
+			status.Set(runtime.NewString("name"), runtime.NewString("default output handler"))
+			status.Set(runtime.NewString("type"), runtime.NewInt(0))
+			status.Set(runtime.NewString("flags"), runtime.NewInt(112))
+			status.Set(runtime.NewString("level"), runtime.NewInt(int64(idx)))
+			status.Set(runtime.NewString("chunk_size"), runtime.NewInt(0))
+			status.Set(runtime.NewString("buffer_size"), runtime.NewInt(int64(buf.Len())))
+			status.Set(runtime.NewString("buffer_used"), runtime.NewInt(int64(buf.Len())))
+			arr.Set(runtime.NewInt(int64(idx)), status)
+		}
+		return arr
+	}
+
+	// Return status of topmost buffer
+	buf := i.outputBuffers[len(i.outputBuffers)-1]
+	status := runtime.NewArray()
+	status.Set(runtime.NewString("name"), runtime.NewString("default output handler"))
+	status.Set(runtime.NewString("type"), runtime.NewInt(0))
+	status.Set(runtime.NewString("flags"), runtime.NewInt(112))
+	status.Set(runtime.NewString("level"), runtime.NewInt(int64(len(i.outputBuffers)-1)))
+	status.Set(runtime.NewString("chunk_size"), runtime.NewInt(0))
+	status.Set(runtime.NewString("buffer_size"), runtime.NewInt(int64(buf.Len())))
+	status.Set(runtime.NewString("buffer_used"), runtime.NewInt(int64(buf.Len())))
+	return status
+}
+
 // ----------------------------------------------------------------------------
 // Misc functions
 
@@ -5282,6 +5362,45 @@ func builtinPasswordVerify(args ...runtime.Value) runtime.Value {
 	return runtime.NewBool(expected == hash)
 }
 
+func builtinOpensslRandomPseudoBytes(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	length := int(args[0].ToInt())
+	if length <= 0 {
+		return runtime.FALSE
+	}
+
+	bytes := make([]byte, length)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(string(bytes))
+}
+
+func builtinRandomBytes(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	length := int(args[0].ToInt())
+	if length <= 0 {
+		return runtime.FALSE
+	}
+
+	bytes := make([]byte, length)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		// In PHP, random_bytes throws an exception on failure
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(string(bytes))
+}
+
 func builtinBase64Encode(args ...runtime.Value) runtime.Value {
 	if len(args) < 1 {
 		return runtime.NewString("")
@@ -5446,6 +5565,141 @@ func builtinConvertUudecode(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.NewString(result.String())
+}
+
+// ----------------------------------------------------------------------------
+// Compression functions
+
+func builtinGzcompress(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	data := args[0].ToString()
+	level := flate.DefaultCompression
+	if len(args) >= 2 {
+		level = int(args[1].ToInt())
+		if level < -1 || level > 9 {
+			level = flate.DefaultCompression
+		}
+	}
+
+	var buf bytes.Buffer
+	w, err := zlib.NewWriterLevel(&buf, level)
+	if err != nil {
+		return runtime.FALSE
+	}
+	w.Write([]byte(data))
+	w.Close()
+
+	return runtime.NewString(buf.String())
+}
+
+func builtinGzuncompress(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	data := args[0].ToString()
+	r, err := zlib.NewReader(bytes.NewReader([]byte(data)))
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer r.Close()
+
+	result, err := io.ReadAll(r)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(string(result))
+}
+
+func builtinGzencode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	data := args[0].ToString()
+	level := flate.DefaultCompression
+	if len(args) >= 2 {
+		level = int(args[1].ToInt())
+		if level < -1 || level > 9 {
+			level = flate.DefaultCompression
+		}
+	}
+
+	var buf bytes.Buffer
+	w, err := gzip.NewWriterLevel(&buf, level)
+	if err != nil {
+		return runtime.FALSE
+	}
+	w.Write([]byte(data))
+	w.Close()
+
+	return runtime.NewString(buf.String())
+}
+
+func builtinGzdecode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	data := args[0].ToString()
+	r, err := gzip.NewReader(bytes.NewReader([]byte(data)))
+	if err != nil {
+		return runtime.FALSE
+	}
+	defer r.Close()
+
+	result, err := io.ReadAll(r)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(string(result))
+}
+
+func builtinGzdeflate(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	data := args[0].ToString()
+	level := flate.DefaultCompression
+	if len(args) >= 2 {
+		level = int(args[1].ToInt())
+		if level < -1 || level > 9 {
+			level = flate.DefaultCompression
+		}
+	}
+
+	var buf bytes.Buffer
+	w, err := flate.NewWriter(&buf, level)
+	if err != nil {
+		return runtime.FALSE
+	}
+	w.Write([]byte(data))
+	w.Close()
+
+	return runtime.NewString(buf.String())
+}
+
+func builtinGzinflate(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	data := args[0].ToString()
+	r := flate.NewReader(bytes.NewReader([]byte(data)))
+	defer r.Close()
+
+	result, err := io.ReadAll(r)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.NewString(string(result))
 }
 
 // ----------------------------------------------------------------------------
@@ -8675,6 +8929,191 @@ func builtinInetNtop(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+func builtinDnsGetRecord(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	hostname := args[0].ToString()
+	recordType := "ANY"
+	if len(args) >= 2 {
+		// DNS_A = 1, DNS_MX = 16384, DNS_TXT = 32768, etc.
+		typeInt := args[1].ToInt()
+		switch typeInt {
+		case 1:
+			recordType = "A"
+		case 2:
+			recordType = "NS"
+		case 5:
+			recordType = "CNAME"
+		case 15:
+			recordType = "MX"
+		case 16:
+			recordType = "TXT"
+		case 28:
+			recordType = "AAAA"
+		}
+	}
+
+	result := runtime.NewArray()
+	idx := int64(0)
+
+	switch recordType {
+	case "A", "ANY":
+		ips, err := net.LookupIP(hostname)
+		if err == nil {
+			for _, ip := range ips {
+				if ip4 := ip.To4(); ip4 != nil {
+					record := runtime.NewArray()
+					record.Set(runtime.NewString("host"), runtime.NewString(hostname))
+					record.Set(runtime.NewString("type"), runtime.NewString("A"))
+					record.Set(runtime.NewString("ip"), runtime.NewString(ip4.String()))
+					result.Set(runtime.NewInt(idx), record)
+					idx++
+				}
+			}
+		}
+	case "AAAA":
+		ips, err := net.LookupIP(hostname)
+		if err == nil {
+			for _, ip := range ips {
+				if ip.To4() == nil {
+					record := runtime.NewArray()
+					record.Set(runtime.NewString("host"), runtime.NewString(hostname))
+					record.Set(runtime.NewString("type"), runtime.NewString("AAAA"))
+					record.Set(runtime.NewString("ipv6"), runtime.NewString(ip.String()))
+					result.Set(runtime.NewInt(idx), record)
+					idx++
+				}
+			}
+		}
+	case "MX":
+		mxs, err := net.LookupMX(hostname)
+		if err == nil {
+			for _, mx := range mxs {
+				record := runtime.NewArray()
+				record.Set(runtime.NewString("host"), runtime.NewString(hostname))
+				record.Set(runtime.NewString("type"), runtime.NewString("MX"))
+				record.Set(runtime.NewString("pri"), runtime.NewInt(int64(mx.Pref)))
+				record.Set(runtime.NewString("target"), runtime.NewString(mx.Host))
+				result.Set(runtime.NewInt(idx), record)
+				idx++
+			}
+		}
+	case "TXT":
+		txts, err := net.LookupTXT(hostname)
+		if err == nil {
+			for _, txt := range txts {
+				record := runtime.NewArray()
+				record.Set(runtime.NewString("host"), runtime.NewString(hostname))
+				record.Set(runtime.NewString("type"), runtime.NewString("TXT"))
+				record.Set(runtime.NewString("txt"), runtime.NewString(txt))
+				result.Set(runtime.NewInt(idx), record)
+				idx++
+			}
+		}
+	case "NS":
+		nss, err := net.LookupNS(hostname)
+		if err == nil {
+			for _, ns := range nss {
+				record := runtime.NewArray()
+				record.Set(runtime.NewString("host"), runtime.NewString(hostname))
+				record.Set(runtime.NewString("type"), runtime.NewString("NS"))
+				record.Set(runtime.NewString("target"), runtime.NewString(ns.Host))
+				result.Set(runtime.NewInt(idx), record)
+				idx++
+			}
+		}
+	case "CNAME":
+		cname, err := net.LookupCNAME(hostname)
+		if err == nil {
+			record := runtime.NewArray()
+			record.Set(runtime.NewString("host"), runtime.NewString(hostname))
+			record.Set(runtime.NewString("type"), runtime.NewString("CNAME"))
+			record.Set(runtime.NewString("target"), runtime.NewString(cname))
+			result.Set(runtime.NewInt(idx), record)
+		}
+	}
+
+	return result
+}
+
+func builtinCheckdnsrr(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	hostname := args[0].ToString()
+	recordType := "MX"
+	if len(args) >= 2 {
+		recordType = strings.ToUpper(args[1].ToString())
+	}
+
+	switch recordType {
+	case "A", "AAAA":
+		ips, err := net.LookupIP(hostname)
+		if err == nil && len(ips) > 0 {
+			return runtime.TRUE
+		}
+	case "MX":
+		mxs, err := net.LookupMX(hostname)
+		if err == nil && len(mxs) > 0 {
+			return runtime.TRUE
+		}
+	case "NS":
+		nss, err := net.LookupNS(hostname)
+		if err == nil && len(nss) > 0 {
+			return runtime.TRUE
+		}
+	case "TXT":
+		txts, err := net.LookupTXT(hostname)
+		if err == nil && len(txts) > 0 {
+			return runtime.TRUE
+		}
+	case "CNAME":
+		cname, err := net.LookupCNAME(hostname)
+		if err == nil && cname != "" {
+			return runtime.TRUE
+		}
+	}
+
+	return runtime.FALSE
+}
+
+func builtinGetmxrr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	hostname := args[0].ToString()
+
+	mxs, err := net.LookupMX(hostname)
+	if err != nil || len(mxs) == 0 {
+		return runtime.FALSE
+	}
+
+	// args[1] should be a reference for hosts array
+	hostsArr := runtime.NewArray()
+	weightsArr := runtime.NewArray()
+
+	for idx, mx := range mxs {
+		hostsArr.Set(runtime.NewInt(int64(idx)), runtime.NewString(mx.Host))
+		weightsArr.Set(runtime.NewInt(int64(idx)), runtime.NewInt(int64(mx.Pref)))
+	}
+
+	// Set the reference values (simplified - in real PHP these are by reference)
+	if ref, ok := args[1].(*runtime.Reference); ok {
+		*ref.Value = hostsArr
+	}
+	if len(args) >= 3 {
+		if ref, ok := args[2].(*runtime.Reference); ok {
+			*ref.Value = weightsArr
+		}
+	}
+
+	return runtime.TRUE
 }
 
 // HTTP Header functions

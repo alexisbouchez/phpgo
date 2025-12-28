@@ -168,7 +168,7 @@ Network Functions:
   [X] gethostbyname() / gethostbyaddr()
   [X] ip2long() / long2ip()
   [X] inet_pton() / inet_ntop()
-  [ ] dns_get_record()
+  [X] dns_get_record()
 
 Variable Handling:
   [X] isset() / empty() (exist as language constructs)
@@ -197,13 +197,13 @@ Caching Extensions (for WordPress object cache):
   [ ] Basic in-memory cache implementation
 
 Compression:
-  [ ] gzip/deflate (gzcompress, gzuncompress, etc.)
+  [X] gzip/deflate (gzcompress, gzuncompress, etc.)
   [ ] ZIP archive (ZipArchive class)
   [ ] tar support
 
 OpenSSL/Crypto:
   [ ] openssl_encrypt() / openssl_decrypt()
-  [ ] openssl_random_pseudo_bytes()
+  [X] openssl_random_pseudo_bytes()
   [X] password_hash() / password_verify() (modern PHP)
   [ ] sodium extension (PHP 7.2+)
 
@@ -231,8 +231,8 @@ SPL (Standard PHP Library):
 
 Output Control Enhancements:
   [ ] ob_start() callback parameter
-  [ ] ob_list_handlers()
-  [ ] ob_get_status()
+  [X] ob_list_handlers()
+  [X] ob_get_status()
 
 NOTES
 ==============================================
