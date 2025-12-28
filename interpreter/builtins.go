@@ -646,6 +646,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinGethostbyname
 	case "gethostbyaddr":
 		return builtinGethostbyaddr
+	case "inet_pton":
+		return builtinInetPton
+	case "inet_ntop":
+		return builtinInetNtop
 
 	default:
 		return nil
@@ -6693,4 +6697,47 @@ func builtinGethostbyaddr(args ...runtime.Value) runtime.Value {
 		hostname = hostname[:len(hostname)-1]
 	}
 	return runtime.NewString(hostname)
+}
+
+func builtinInetPton(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	address := args[0].ToString()
+	ip := net.ParseIP(address)
+	if ip == nil {
+		return runtime.FALSE
+	}
+
+	// Convert to binary representation
+	// For IPv4, use the 4-byte representation
+	if ipv4 := ip.To4(); ipv4 != nil {
+		return runtime.NewString(string(ipv4))
+	}
+
+	// For IPv6, use the 16-byte representation
+	return runtime.NewString(string(ip.To16()))
+}
+
+func builtinInetNtop(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	in := args[0].ToString()
+	inBytes := []byte(in)
+
+	// Check length to determine if IPv4 or IPv6
+	if len(inBytes) == 4 {
+		// IPv4
+		ip := net.IP(inBytes)
+		return runtime.NewString(ip.String())
+	} else if len(inBytes) == 16 {
+		// IPv6
+		ip := net.IP(inBytes)
+		return runtime.NewString(ip.String())
+	}
+
+	return runtime.FALSE
 }
