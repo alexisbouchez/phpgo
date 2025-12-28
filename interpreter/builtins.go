@@ -403,6 +403,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinRealpath
 	case "glob":
 		return builtinGlob
+	case "getenv":
+		return builtinGetenv
+	case "putenv":
+		return builtinPutenv
+	case "parse_ini_file":
+		return builtinParseIniFile
+	case "parse_ini_string":
+		return builtinParseIniString
 
 	// Date/time functions
 	case "time":
@@ -3935,6 +3943,115 @@ func builtinGlob(args ...runtime.Value) runtime.Value {
 		arr.Set(nil, runtime.NewString(match))
 	}
 	return arr
+}
+
+func builtinGetenv(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	varName := args[0].ToString()
+	value := os.Getenv(varName)
+	if value == "" {
+		// Check if variable exists but is empty vs doesn't exist
+		if _, exists := os.LookupEnv(varName); !exists {
+			return runtime.FALSE
+		}
+	}
+	return runtime.NewString(value)
+}
+
+func builtinPutenv(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	setting := args[0].ToString()
+
+	// Parse "NAME=value" format
+	parts := strings.SplitN(setting, "=", 2)
+	if len(parts) != 2 {
+		return runtime.FALSE
+	}
+
+	err := os.Setenv(parts[0], parts[1])
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.TRUE
+}
+
+func builtinParseIniFile(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	filename := args[0].ToString()
+
+	// Read file contents
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return parseIniString(string(content))
+}
+
+func builtinParseIniString(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	content := args[0].ToString()
+	return parseIniString(content)
+}
+
+func parseIniString(content string) runtime.Value {
+	result := runtime.NewArray()
+	lines := strings.Split(content, "\n")
+	var currentSection runtime.Value
+	currentSection = nil
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines and comments
+		if line == "" || strings.HasPrefix(line, ";") || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Check for section header [section]
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			sectionName := strings.TrimSpace(line[1 : len(line)-1])
+			currentSection = runtime.NewString(sectionName)
+			result.Set(currentSection, runtime.NewArray())
+			continue
+		}
+
+		// Parse key=value
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+
+		// Remove quotes if present
+		if (strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"")) ||
+			(strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'")) {
+			value = value[1 : len(value)-1]
+		}
+
+		if currentSection != nil {
+			// Add to section
+			section, ok := result.Elements[currentSection].(*runtime.Array)
+			if ok {
+				section.Set(runtime.NewString(key), runtime.NewString(value))
+			}
+		} else {
+			// Add to root level
+			result.Set(runtime.NewString(key), runtime.NewString(value))
+		}
+	}
+
+	return result
 }
 
 // ----------------------------------------------------------------------------
