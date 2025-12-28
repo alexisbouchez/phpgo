@@ -290,6 +290,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinClassExists
 	case "class_alias":
 		return i.builtinClassAlias
+	case "spl_autoload_register":
+		return i.builtinSplAutoloadRegister
 	case "call_user_func":
 		return i.builtinCallUserFunc
 	case "call_user_func_array":
@@ -2079,6 +2081,32 @@ func (i *Interpreter) builtinClassAlias(args ...runtime.Value) runtime.Value {
 
 	// Create the alias by defining the same class with the new name
 	i.env.DefineClass(aliasName, class)
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinSplAutoloadRegister(args ...runtime.Value) runtime.Value {
+	// If no callback provided, use default autoload
+	if len(args) == 0 {
+		return runtime.TRUE
+	}
+
+	callback := args[0]
+
+	// Verify the callback is callable
+	if _, ok := callback.(*runtime.Function); !ok {
+		// Could also be a string referring to a function name
+		if str, ok := callback.(*runtime.String); ok {
+			_, exists := i.env.GetFunction(str.Value)
+			if !exists {
+				return runtime.FALSE
+			}
+		} else {
+			return runtime.FALSE
+		}
+	}
+
+	// Register the autoload function
+	i.autoloadFuncs = append(i.autoloadFuncs, callback)
 	return runtime.TRUE
 }
 

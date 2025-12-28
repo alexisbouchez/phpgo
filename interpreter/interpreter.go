@@ -31,6 +31,7 @@ type Interpreter struct {
 	strictTypes      bool                // Whether strict_types is enabled
 	resources        map[int64]*runtime.Resource // Open resources (files, etc.)
 	nextResourceID   int64               // Next resource ID
+	autoloadFuncs    []runtime.Value     // Registered autoload functions
 }
 
 // New creates a new interpreter.
@@ -48,6 +49,7 @@ func New() *Interpreter {
 		useConstants:   make(map[string]string),
 		resources:      make(map[int64]*runtime.Resource),
 		nextResourceID: 1,
+		autoloadFuncs:  make([]runtime.Value, 0),
 	}
 	i.registerBuiltins()
 	return i
