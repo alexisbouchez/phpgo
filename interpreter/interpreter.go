@@ -32,6 +32,7 @@ type Interpreter struct {
 	resources        map[int64]*runtime.Resource // Open resources (files, etc.)
 	nextResourceID   int64               // Next resource ID
 	autoloadFuncs    []runtime.Value     // Registered autoload functions
+	iniSettings      map[string]string   // PHP ini settings
 }
 
 // New creates a new interpreter.
@@ -50,7 +51,15 @@ func New() *Interpreter {
 		resources:      make(map[int64]*runtime.Resource),
 		nextResourceID: 1,
 		autoloadFuncs:  make([]runtime.Value, 0),
+		iniSettings:    make(map[string]string),
 	}
+	// Initialize default ini settings
+	i.iniSettings["display_errors"] = "1"
+	i.iniSettings["error_reporting"] = "32767"
+	i.iniSettings["max_execution_time"] = "30"
+	i.iniSettings["memory_limit"] = "128M"
+	i.iniSettings["upload_max_filesize"] = "2M"
+	i.iniSettings["post_max_size"] = "8M"
 	i.registerBuiltins()
 	return i
 }

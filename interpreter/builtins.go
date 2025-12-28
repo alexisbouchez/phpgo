@@ -291,6 +291,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinDefined
 	case "constant":
 		return i.builtinConstant
+	case "ini_get":
+		return i.builtinIniGet
+	case "ini_set":
+		return i.builtinIniSet
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -2207,6 +2211,43 @@ func (i *Interpreter) builtinConstant(args ...runtime.Value) runtime.Value {
 	}
 
 	return value
+}
+
+func (i *Interpreter) builtinIniGet(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	name := args[0].ToString()
+	if value, ok := i.iniSettings[name]; ok {
+		return runtime.NewString(value)
+	}
+
+	return runtime.FALSE
+}
+
+func (i *Interpreter) builtinIniSet(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	name := args[0].ToString()
+	newValue := args[1].ToString()
+
+	// Get old value
+	oldValue := ""
+	if val, ok := i.iniSettings[name]; ok {
+		oldValue = val
+	}
+
+	// Set new value
+	i.iniSettings[name] = newValue
+
+	// Return old value or false if it didn't exist
+	if oldValue != "" {
+		return runtime.NewString(oldValue)
+	}
+	return runtime.FALSE
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
