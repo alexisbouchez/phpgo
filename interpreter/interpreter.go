@@ -1826,6 +1826,15 @@ func (i *Interpreter) evalNew(e *ast.NewExpr) runtime.Value {
 		for idx, param := range constructor.Params {
 			if idx < len(argVals) {
 				env.Set(param, argVals[idx])
+			} else if idx < len(constructor.Defaults) && constructor.Defaults[idx] != nil {
+				env.Set(param, constructor.Defaults[idx])
+			}
+		}
+
+		// Constructor property promotion: set properties from promoted params
+		for _, promoted := range constructor.PromotedParams {
+			if val, ok := env.Get(promoted.Name); ok {
+				obj.SetProperty(promoted.Name, val)
 			}
 		}
 
@@ -2322,6 +2331,7 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 			params := make([]string, len(m.Params))
 			defaults := make([]runtime.Value, len(m.Params))
 			variadic := false
+			var promotedParams []runtime.PromotedParam
 			for idx, p := range m.Params {
 				params[idx] = p.Var.Name.(*ast.Ident).Name
 				if p.Default != nil {
@@ -2330,19 +2340,31 @@ func (i *Interpreter) evalClassDecl(s *ast.ClassDecl) runtime.Value {
 				if p.Variadic {
 					variadic = true
 				}
+				// Constructor property promotion
+				if p.Visibility != 0 {
+					promoted := runtime.PromotedParam{
+						Name:        p.Var.Name.(*ast.Ident).Name,
+						IsPublic:    p.Visibility == token.T_PUBLIC,
+						IsProtected: p.Visibility == token.T_PROTECTED,
+						IsPrivate:   p.Visibility == token.T_PRIVATE,
+						Readonly:    p.Readonly,
+					}
+					promotedParams = append(promotedParams, promoted)
+				}
 			}
 			method := &runtime.Method{
-				Name:        m.Name.Name,
-				Params:      params,
-				Defaults:    defaults,
-				Variadic:    variadic,
-				Body:        m.Body,
-				IsPublic:    m.Modifiers == nil || m.Modifiers.Public,
-				IsProtected: m.Modifiers != nil && m.Modifiers.Protected,
-				IsPrivate:   m.Modifiers != nil && m.Modifiers.Private,
-				IsStatic:    m.Modifiers != nil && m.Modifiers.Static,
-				IsAbstract:  m.Modifiers != nil && m.Modifiers.Abstract,
-				IsFinal:     m.Modifiers != nil && m.Modifiers.Final,
+				Name:           m.Name.Name,
+				Params:         params,
+				Defaults:       defaults,
+				Variadic:       variadic,
+				PromotedParams: promotedParams,
+				Body:           m.Body,
+				IsPublic:       m.Modifiers == nil || m.Modifiers.Public,
+				IsProtected:    m.Modifiers != nil && m.Modifiers.Protected,
+				IsPrivate:      m.Modifiers != nil && m.Modifiers.Private,
+				IsStatic:       m.Modifiers != nil && m.Modifiers.Static,
+				IsAbstract:     m.Modifiers != nil && m.Modifiers.Abstract,
+				IsFinal:        m.Modifiers != nil && m.Modifiers.Final,
 			}
 			class.Methods[m.Name.Name] = method
 

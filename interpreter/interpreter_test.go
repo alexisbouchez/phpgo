@@ -1888,3 +1888,63 @@ func TestEvalGeneratorYieldFromArray(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Constructor Property Promotion
+
+func TestEvalConstructorPropertyPromotion(t *testing.T) {
+	input := `<?php
+	class Point {
+		public function __construct(
+			public int $x,
+			public int $y
+		) {}
+	}
+	$p = new Point(3, 4);
+	echo $p->x . "," . $p->y;
+	`
+	expected := "3,4"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalConstructorPropertyPromotionMixed(t *testing.T) {
+	input := `<?php
+	class User {
+		public function __construct(
+			public string $name,
+			private string $email,
+			$normalParam
+		) {
+			echo "Normal: " . $normalParam;
+		}
+	}
+	$u = new User("John", "john@example.com", "test");
+	echo " Name: " . $u->name;
+	`
+	expected := "Normal: test Name: John"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestEvalConstructorPropertyPromotionDefaults(t *testing.T) {
+	input := `<?php
+	class Config {
+		public function __construct(
+			public string $env = "production",
+			public bool $debug = false
+		) {}
+	}
+	$c = new Config();
+	echo $c->env;
+	`
+	expected := "production"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

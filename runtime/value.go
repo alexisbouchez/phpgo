@@ -354,18 +354,28 @@ type PropertyDef struct {
 	IsReadonly bool
 }
 
-type Method struct {
+// PromotedParam represents a constructor property promotion
+type PromotedParam struct {
 	Name        string
-	Params      []string
-	Defaults    []Value // Default values for parameters
-	Variadic    bool    // Last param is variadic (...$args)
-	Body        interface{} // Will be *ast.BlockStmt
 	IsPublic    bool
 	IsProtected bool
 	IsPrivate   bool
-	IsStatic    bool
-	IsAbstract  bool
-	IsFinal     bool
+	Readonly    bool
+}
+
+type Method struct {
+	Name           string
+	Params         []string
+	Defaults       []Value // Default values for parameters
+	Variadic       bool    // Last param is variadic (...$args)
+	PromotedParams []PromotedParam
+	Body           interface{} // Will be *ast.BlockStmt
+	IsPublic       bool
+	IsProtected    bool
+	IsPrivate      bool
+	IsStatic       bool
+	IsAbstract     bool
+	IsFinal        bool
 }
 
 type Interface struct {

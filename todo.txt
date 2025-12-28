@@ -1,5 +1,4 @@
 HIGH PRIORITY
-- Constructor property promotion
 - Proper namespace resolution
 
 MEDIUM PRIORITY
