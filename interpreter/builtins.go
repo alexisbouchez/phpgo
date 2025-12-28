@@ -571,6 +571,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinIsSubclassOf
 	case "is_a":
 		return i.builtinIsA
+	case "spl_object_hash":
+		return builtinSplObjectHash
+	case "spl_object_id":
+		return builtinSplObjectId
+	case "get_object_vars":
+		return i.builtinGetObjectVars
+	case "get_class_vars":
+		return i.builtinGetClassVars
 
 	// Additional string functions
 	case "strstr", "strchr":
@@ -5901,6 +5909,96 @@ func (i *Interpreter) builtinIsA(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.FALSE
+}
+
+func builtinSplObjectHash(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	obj, ok := args[0].(*runtime.Object)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Generate a unique hash for the object using its memory address
+	// In Go, we can use fmt.Sprintf with %p to get the pointer address
+	hash := fmt.Sprintf("%p", obj)
+	// Remove the "0x" prefix to get a clean hex string
+	hash = strings.TrimPrefix(hash, "0x")
+	// Pad to 32 characters to match PHP's format
+	hash = fmt.Sprintf("%032s", hash)
+
+	return runtime.NewString(hash)
+}
+
+func builtinSplObjectId(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	obj, ok := args[0].(*runtime.Object)
+	if !ok {
+		return runtime.FALSE
+	}
+
+	// Generate a unique integer ID for the object
+	// We can use the pointer address as the ID
+	id := fmt.Sprintf("%p", obj)
+	// Remove 0x prefix and convert hex to int
+	id = strings.TrimPrefix(id, "0x")
+	var intId int64
+	fmt.Sscanf(id, "%x", &intId)
+
+	return runtime.NewInt(intId)
+}
+
+func (i *Interpreter) builtinGetObjectVars(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	obj, ok := args[0].(*runtime.Object)
+	if !ok {
+		return runtime.NULL
+	}
+
+	result := runtime.NewArray()
+
+	// Add all instance properties that are accessible
+	for name, value := range obj.Properties {
+		result.Set(runtime.NewString(name), value)
+	}
+
+	return result
+}
+
+func (i *Interpreter) builtinGetClassVars(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NULL
+	}
+
+	className := args[0].ToString()
+
+	// Look up the class in the environment
+	class, ok := i.env.GetClass(className)
+	if !ok {
+		return runtime.NULL
+	}
+
+	result := runtime.NewArray()
+
+	// Return the default values of class properties
+	for name, prop := range class.Properties {
+		// Only include properties with default values
+		if prop.Default != nil {
+			result.Set(runtime.NewString(name), prop.Default)
+		} else {
+			result.Set(runtime.NewString(name), runtime.NULL)
+		}
+	}
+
+	return result
 }
 
 // ----------------------------------------------------------------------------
