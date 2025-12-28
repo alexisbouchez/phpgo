@@ -458,8 +458,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinArrayCountValues
 	case "array_diff":
 		return builtinArrayDiff
+	case "array_diff_key":
+		return builtinArrayDiffKey
 	case "array_intersect":
 		return builtinArrayIntersect
+	case "array_intersect_key":
+		return builtinArrayIntersectKey
 	case "usort":
 		return i.builtinUsort
 	case "uasort":
@@ -4377,6 +4381,69 @@ func builtinArrayIntersect(args ...runtime.Value) runtime.Value {
 		val := arr1.Elements[key]
 		if counts[val.ToString()] == numArrays {
 			result.Set(key, val)
+		}
+	}
+	return result
+}
+
+func builtinArrayDiffKey(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewArray()
+	}
+	arr1, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	// Collect keys from all other arrays
+	excludeKeys := make(map[string]bool)
+	for i := 1; i < len(args); i++ {
+		if arr, ok := args[i].(*runtime.Array); ok {
+			for _, key := range arr.Keys {
+				excludeKeys[key.ToString()] = true
+			}
+		}
+	}
+
+	result := runtime.NewArray()
+	for _, key := range arr1.Keys {
+		if !excludeKeys[key.ToString()] {
+			result.Set(key, arr1.Elements[key])
+		}
+	}
+	return result
+}
+
+func builtinArrayIntersectKey(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewArray()
+	}
+	arr1, ok := args[0].(*runtime.Array)
+	if !ok {
+		return runtime.NewArray()
+	}
+
+	// Collect keys that exist in ALL arrays
+	keyCounts := make(map[string]int)
+	numArrays := len(args)
+
+	for i := 0; i < numArrays; i++ {
+		if arr, ok := args[i].(*runtime.Array); ok {
+			seen := make(map[string]bool)
+			for _, key := range arr.Keys {
+				keyStr := key.ToString()
+				if !seen[keyStr] {
+					seen[keyStr] = true
+					keyCounts[keyStr]++
+				}
+			}
+		}
+	}
+
+	result := runtime.NewArray()
+	for _, key := range arr1.Keys {
+		if keyCounts[key.ToString()] == numArrays {
+			result.Set(key, arr1.Elements[key])
 		}
 	}
 	return result
