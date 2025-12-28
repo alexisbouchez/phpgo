@@ -47,11 +47,52 @@ A PHP interpreter written in Go.
 
 ## Installation
 
+### CLI Tool
+
 ```bash
-go install github.com/alexisbouchez/phpgo@latest
+# Install the CLI tool
+go install github.com/alexisbouchez/phpgo/cmd/phpgo@latest
+
+# Or build from source
+git clone https://github.com/alexisbouchez/phpgo.git
+cd phpgo
+go build -o phpgo ./cmd/phpgo
+```
+
+### Go Library
+
+```bash
+go get github.com/alexisbouchez/phpgo
 ```
 
 ## Usage
+
+### Command Line Interface
+
+Execute PHP files:
+```bash
+phpgo script.php
+phpgo examples/01_hello_world.php
+```
+
+Execute PHP code directly:
+```bash
+phpgo -r "echo 'Hello, World!';"
+phpgo -r "var_dump([1, 2, 3]);"
+phpgo -r "echo date('Y-m-d H:i:s');"
+```
+
+Show version:
+```bash
+phpgo --version
+```
+
+Show help:
+```bash
+phpgo --help
+```
+
+### As a Go Library
 
 ```go
 package main
