@@ -569,6 +569,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "array_pad":
 		return builtinArrayPad
 
+	// Network functions
+	case "ip2long":
+		return builtinIp2long
+	case "long2ip":
+		return builtinLong2ip
+
 	default:
 		return nil
 	}
@@ -5664,4 +5670,49 @@ func builtinArrayPad(args ...runtime.Value) runtime.Value {
 	}
 
 	return result
+}
+
+// ----------------------------------------------------------------------------
+// Network functions
+
+func builtinIp2long(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	ipStr := args[0].ToString()
+
+	// Parse IP address
+	parts := strings.Split(ipStr, ".")
+	if len(parts) != 4 {
+		return runtime.FALSE
+	}
+
+	var result int64
+	for i, part := range parts {
+		val, err := strconv.Atoi(part)
+		if err != nil || val < 0 || val > 255 {
+			return runtime.FALSE
+		}
+		result += int64(val) << uint(8*(3-i))
+	}
+
+	return runtime.NewInt(result)
+}
+
+func builtinLong2ip(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	num := args[0].ToInt()
+
+	// Convert long to IP address
+	octet1 := (num >> 24) & 0xFF
+	octet2 := (num >> 16) & 0xFF
+	octet3 := (num >> 8) & 0xFF
+	octet4 := num & 0xFF
+
+	ipStr := fmt.Sprintf("%d.%d.%d.%d", octet1, octet2, octet3, octet4)
+	return runtime.NewString(ipStr)
 }
