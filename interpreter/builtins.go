@@ -406,6 +406,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinQuotedPrintableEncode
 	case "quoted_printable_decode":
 		return builtinQuotedPrintableDecode
+	case "convert_uuencode":
+		return builtinConvertUuencode
+	case "convert_uudecode":
+		return builtinConvertUudecode
 
 	// Additional string functions
 	case "str_contains":
@@ -3734,6 +3738,106 @@ func builtinQuotedPrintableDecode(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.NewString(string(decoded))
+}
+
+func builtinConvertUuencode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	data := []byte(args[0].ToString())
+	var result bytes.Buffer
+
+	// Process data in chunks of 45 bytes
+	for i := 0; i < len(data); i += 45 {
+		end := i + 45
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := data[i:end]
+
+		// Write length character
+		result.WriteByte(byte(len(chunk) + 32))
+
+		// Encode chunk
+		for j := 0; j < len(chunk); j += 3 {
+			var b1, b2, b3 byte
+			b1 = chunk[j]
+			if j+1 < len(chunk) {
+				b2 = chunk[j+1]
+			}
+			if j+2 < len(chunk) {
+				b3 = chunk[j+2]
+			}
+
+			result.WriteByte(byte(((b1 >> 2) & 0x3F) + 32))
+			result.WriteByte(byte((((b1 << 4) | (b2 >> 4)) & 0x3F) + 32))
+			result.WriteByte(byte((((b2 << 2) | (b3 >> 6)) & 0x3F) + 32))
+			result.WriteByte(byte((b3 & 0x3F) + 32))
+		}
+		result.WriteByte('\n')
+	}
+
+	// Add terminator
+	result.WriteByte('`')
+	result.WriteByte('\n')
+
+	return runtime.NewString(result.String())
+}
+
+func builtinConvertUudecode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	data := args[0].ToString()
+	lines := strings.Split(data, "\n")
+	var result bytes.Buffer
+
+	for _, line := range lines {
+		if len(line) == 0 || line[0] == '`' {
+			continue
+		}
+
+		// Get length
+		length := int(line[0]) - 32
+		if length <= 0 || length > 45 {
+			continue
+		}
+
+		// Decode line
+		encoded := line[1:]
+		var decoded []byte
+
+		for i := 0; i < len(encoded); i += 4 {
+			if i+3 >= len(encoded) {
+				break
+			}
+
+			c1 := byte(encoded[i]) - 32
+			c2 := byte(encoded[i+1]) - 32
+			c3 := byte(encoded[i+2]) - 32
+			c4 := byte(encoded[i+3]) - 32
+
+			b1 := (c1 << 2) | (c2 >> 4)
+			b2 := (c2 << 4) | (c3 >> 2)
+			b3 := (c3 << 6) | c4
+
+			decoded = append(decoded, b1)
+			if len(decoded) < length {
+				decoded = append(decoded, b2)
+			}
+			if len(decoded) < length {
+				decoded = append(decoded, b3)
+			}
+
+			if len(decoded) >= length {
+				break
+			}
+		}
+
+		result.Write(decoded[:length])
+	}
+
+	return runtime.NewString(result.String())
 }
 
 // ----------------------------------------------------------------------------
