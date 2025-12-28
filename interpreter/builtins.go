@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -282,6 +283,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinJsonEncode
 	case "json_decode":
 		return builtinJsonDecode
+	case "serialize":
+		return i.builtinSerialize
+	case "unserialize":
+		return i.builtinUnserialize
 
 	// File functions
 	case "file_get_contents":
@@ -2115,6 +2120,219 @@ func interfaceToValue(data interface{}, assoc bool) runtime.Value {
 	default:
 		return runtime.NULL
 	}
+}
+
+// ----------------------------------------------------------------------------
+// Serialization functions
+
+func (i *Interpreter) builtinSerialize(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	return runtime.NewString(i.serializeValue(args[0]))
+}
+
+func (i *Interpreter) serializeValue(v runtime.Value) string {
+	switch val := v.(type) {
+	case *runtime.Null:
+		return "N;"
+	case *runtime.Bool:
+		if val.Value {
+			return "b:1;"
+		}
+		return "b:0;"
+	case *runtime.Int:
+		return fmt.Sprintf("i:%d;", val.Value)
+	case *runtime.Float:
+		return fmt.Sprintf("d:%s;", strconv.FormatFloat(val.Value, 'G', -1, 64))
+	case *runtime.String:
+		return fmt.Sprintf("s:%d:\"%s\";", len(val.Value), val.Value)
+	case *runtime.Array:
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("a:%d:{", val.Len()))
+		for _, key := range val.Keys {
+			sb.WriteString(i.serializeValue(key))
+			sb.WriteString(i.serializeValue(val.Elements[key]))
+		}
+		sb.WriteString("}")
+		return sb.String()
+	case *runtime.Object:
+		return i.serializeObject(val)
+	default:
+		return "N;"
+	}
+}
+
+func (i *Interpreter) serializeObject(obj *runtime.Object) string {
+	className := obj.Class.Name
+
+	// Check for __sleep magic method
+	var propsToSerialize []string
+	if sleepMethod, _ := i.findMethod(obj.Class, "__sleep"); sleepMethod != nil {
+		result := i.callArrayAccessMethod(obj, "__sleep", []runtime.Value{})
+		if arr, ok := result.(*runtime.Array); ok {
+			for _, key := range arr.Keys {
+				propsToSerialize = append(propsToSerialize, arr.Elements[key].ToString())
+			}
+		}
+	} else {
+		// Serialize all properties
+		for propName := range obj.Properties {
+			propsToSerialize = append(propsToSerialize, propName)
+		}
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("O:%d:\"%s\":%d:{", len(className), className, len(propsToSerialize)))
+	for _, propName := range propsToSerialize {
+		sb.WriteString(i.serializeValue(runtime.NewString(propName)))
+		if val, ok := obj.Properties[propName]; ok {
+			sb.WriteString(i.serializeValue(val))
+		} else {
+			sb.WriteString("N;")
+		}
+	}
+	sb.WriteString("}")
+	return sb.String()
+}
+
+func (i *Interpreter) builtinUnserialize(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	data := args[0].ToString()
+	result, _ := i.unserializeValue(data, 0)
+	return result
+}
+
+func (i *Interpreter) unserializeValue(data string, pos int) (runtime.Value, int) {
+	if pos >= len(data) {
+		return runtime.FALSE, pos
+	}
+
+	switch data[pos] {
+	case 'N':
+		// N;
+		return runtime.NULL, pos + 2
+	case 'b':
+		// b:0; or b:1;
+		if pos+3 < len(data) {
+			val := data[pos+2] == '1'
+			return runtime.NewBool(val), pos + 4
+		}
+		return runtime.FALSE, pos
+	case 'i':
+		// i:123;
+		pos += 2 // skip "i:"
+		end := strings.Index(data[pos:], ";")
+		if end == -1 {
+			return runtime.FALSE, pos
+		}
+		num, _ := strconv.ParseInt(data[pos:pos+end], 10, 64)
+		return runtime.NewInt(num), pos + end + 1
+	case 'd':
+		// d:1.5;
+		pos += 2 // skip "d:"
+		end := strings.Index(data[pos:], ";")
+		if end == -1 {
+			return runtime.FALSE, pos
+		}
+		num, _ := strconv.ParseFloat(data[pos:pos+end], 64)
+		return runtime.NewFloat(num), pos + end + 1
+	case 's':
+		// s:5:"hello";
+		pos += 2 // skip "s:"
+		colonPos := strings.Index(data[pos:], ":")
+		if colonPos == -1 {
+			return runtime.FALSE, pos
+		}
+		length, _ := strconv.Atoi(data[pos : pos+colonPos])
+		pos += colonPos + 2 // skip length, :, and opening "
+		str := data[pos : pos+length]
+		return runtime.NewString(str), pos + length + 2 // +2 for closing ";
+	case 'a':
+		// a:2:{...}
+		return i.unserializeArray(data, pos)
+	case 'O':
+		// O:8:"ClassName":2:{...}
+		return i.unserializeObject(data, pos)
+	default:
+		return runtime.FALSE, pos + 1
+	}
+}
+
+func (i *Interpreter) unserializeArray(data string, pos int) (runtime.Value, int) {
+	pos += 2 // skip "a:"
+	colonPos := strings.Index(data[pos:], ":")
+	if colonPos == -1 {
+		return runtime.FALSE, pos
+	}
+	count, _ := strconv.Atoi(data[pos : pos+colonPos])
+	pos += colonPos + 2 // skip count, :, and {
+
+	arr := runtime.NewArray()
+	for idx := 0; idx < count; idx++ {
+		var key, val runtime.Value
+		key, pos = i.unserializeValue(data, pos)
+		val, pos = i.unserializeValue(data, pos)
+		arr.Set(key, val)
+	}
+	return arr, pos + 1 // +1 for closing }
+}
+
+func (i *Interpreter) unserializeObject(data string, pos int) (runtime.Value, int) {
+	pos += 2 // skip "O:"
+
+	// Get class name length
+	colonPos := strings.Index(data[pos:], ":")
+	if colonPos == -1 {
+		return runtime.FALSE, pos
+	}
+	nameLen, _ := strconv.Atoi(data[pos : pos+colonPos])
+	pos += colonPos + 2 // skip length, :, and opening "
+
+	className := data[pos : pos+nameLen]
+	pos += nameLen + 2 // skip name and closing "
+
+	// Get property count
+	colonPos = strings.Index(data[pos:], ":")
+	if colonPos == -1 {
+		return runtime.FALSE, pos
+	}
+	propCount, _ := strconv.Atoi(data[pos : pos+colonPos])
+	pos += colonPos + 2 // skip count, :, and {
+
+	// Get the class
+	class, ok := i.env.GetClass(className)
+	if !ok {
+		return runtime.FALSE, pos
+	}
+
+	// Create object
+	obj := runtime.NewObject(class)
+
+	// Initialize default properties
+	for propName, propDef := range class.Properties {
+		if propDef.Default != nil {
+			obj.Properties[propName] = propDef.Default
+		}
+	}
+
+	// Read serialized properties
+	for idx := 0; idx < propCount; idx++ {
+		var propName, propVal runtime.Value
+		propName, pos = i.unserializeValue(data, pos)
+		propVal, pos = i.unserializeValue(data, pos)
+		obj.Properties[propName.ToString()] = propVal
+	}
+	pos++ // skip closing }
+
+	// Call __wakeup if it exists
+	if wakeupMethod, _ := i.findMethod(class, "__wakeup"); wakeupMethod != nil {
+		i.callArrayAccessMethod(obj, "__wakeup", []runtime.Value{})
+	}
+
+	return obj, pos
 }
 
 // ----------------------------------------------------------------------------

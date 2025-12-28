@@ -2577,3 +2577,181 @@ func TestIteratorContinue(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// Serialization tests
+
+func TestSerializeScalars(t *testing.T) {
+	input := `<?php
+	echo serialize(null) . ',';
+	echo serialize(true) . ',';
+	echo serialize(false) . ',';
+	echo serialize(42) . ',';
+	echo serialize(3.14) . ',';
+	echo serialize("hello");
+	`
+	expected := "N;,b:1;,b:0;,i:42;,d:3.14;,s:5:\"hello\";"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSerializeArray(t *testing.T) {
+	input := `<?php
+	$arr = [1, 2, 3];
+	echo serialize($arr);
+	`
+	expected := "a:3:{i:0;i:1;i:1;i:2;i:2;i:3;}"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSerializeObject(t *testing.T) {
+	input := `<?php
+	class Point {
+		public $x;
+		public $y;
+
+		public function __construct($x, $y) {
+			$this->x = $x;
+			$this->y = $y;
+		}
+	}
+
+	$p = new Point(10, 20);
+	$serialized = serialize($p);
+	echo strpos($serialized, 'O:5:"Point"') !== false ? 'ok' : 'fail';
+	`
+	expected := "ok"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestUnserializeScalars(t *testing.T) {
+	input := `<?php
+	echo unserialize('N;') === null ? 'null' : 'fail';
+	echo ',';
+	echo unserialize('b:1;') === true ? 'true' : 'fail';
+	echo ',';
+	echo unserialize('b:0;') === false ? 'false' : 'fail';
+	echo ',';
+	echo unserialize('i:42;');
+	echo ',';
+	echo unserialize('s:5:"hello";');
+	`
+	expected := "null,true,false,42,hello"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestUnserializeArray(t *testing.T) {
+	input := `<?php
+	$arr = unserialize('a:3:{i:0;i:1;i:1;i:2;i:2;i:3;}');
+	echo implode(',', $arr);
+	`
+	expected := "1,2,3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestUnserializeObject(t *testing.T) {
+	input := `<?php
+	class Point {
+		public $x;
+		public $y;
+	}
+
+	$p = unserialize('O:5:"Point":2:{s:1:"x";i:10;s:1:"y";i:20;}');
+	echo $p->x . ',' . $p->y;
+	`
+	expected := "10,20"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSerializeSleep(t *testing.T) {
+	input := `<?php
+	class User {
+		public $name;
+		public $password;
+		public $token;
+
+		public function __construct($name, $password) {
+			$this->name = $name;
+			$this->password = $password;
+			$this->token = 'secret123';
+		}
+
+		public function __sleep() {
+			return ['name']; // Only serialize name, not password or token
+		}
+	}
+
+	$u = new User('Alice', 'pass123');
+	$serialized = serialize($u);
+	// Should only contain name, not password or token
+	$hasName = strpos($serialized, 'name') !== false;
+	$hasPassword = strpos($serialized, 'password') !== false;
+	echo $hasName && !$hasPassword ? 'ok' : 'fail';
+	`
+	expected := "ok"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestUnserializeWakeup(t *testing.T) {
+	input := `<?php
+	class Connection {
+		public $host;
+		public $connected = false;
+
+		public function __wakeup() {
+			$this->connected = true;
+		}
+	}
+
+	$c = unserialize('O:10:"Connection":1:{s:4:"host";s:9:"localhost";}');
+	echo $c->host . ',' . ($c->connected ? 'true' : 'false');
+	`
+	expected := "localhost,true"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSerializeRoundtrip(t *testing.T) {
+	input := `<?php
+	class Person {
+		public $name;
+		public $age;
+
+		public function __construct($name, $age) {
+			$this->name = $name;
+			$this->age = $age;
+		}
+	}
+
+	$p = new Person('Bob', 30);
+	$serialized = serialize($p);
+	$restored = unserialize($serialized);
+	echo $restored->name . ',' . $restored->age;
+	`
+	expected := "Bob,30"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
