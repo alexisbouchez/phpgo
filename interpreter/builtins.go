@@ -278,6 +278,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinObClean
 
 	// Misc functions
+	case "define":
+		return i.builtinDefine
 	case "defined":
 		return i.builtinDefined
 	case "function_exists":
@@ -562,6 +564,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinExtract
 	case "get_defined_vars":
 		return i.builtinGetDefinedVars
+	case "get_defined_constants":
+		return i.builtinGetDefinedConstants
 	case "array_pad":
 		return builtinArrayPad
 
@@ -1988,6 +1992,24 @@ func (i *Interpreter) builtinObClean(args ...runtime.Value) runtime.Value {
 
 // ----------------------------------------------------------------------------
 // Misc functions
+
+func (i *Interpreter) builtinDefine(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	name := args[0].ToString()
+	value := args[1]
+
+	// Check if constant already exists
+	if _, ok := i.env.GetConstant(name); ok {
+		return runtime.FALSE
+	}
+
+	// Define the constant
+	i.env.DefineConstant(name, value)
+	return runtime.TRUE
+}
 
 func (i *Interpreter) builtinDefined(args ...runtime.Value) runtime.Value {
 	if len(args) < 1 {
@@ -5559,6 +5581,18 @@ func (i *Interpreter) builtinGetDefinedVars(args ...runtime.Value) runtime.Value
 	// Get all variables from the current environment
 	vars := i.env.GetAllVariables()
 	for name, value := range vars {
+		result.Set(runtime.NewString(name), value)
+	}
+
+	return result
+}
+
+func (i *Interpreter) builtinGetDefinedConstants(args ...runtime.Value) runtime.Value {
+	result := runtime.NewArray()
+
+	// Get all constants from the environment
+	constants := i.env.GetAllConstants()
+	for name, value := range constants {
 		result.Set(runtime.NewString(name), value)
 	}
 

@@ -80,6 +80,15 @@ func (e *Environment) GetAllVariables() map[string]Value {
 	return result
 }
 
+// GetAllConstants returns all constants.
+func (e *Environment) GetAllConstants() map[string]Value {
+	result := make(map[string]Value)
+	for k, v := range e.constants {
+		result[k] = v
+	}
+	return result
+}
+
 // Isset checks if a variable is set and not null.
 func (e *Environment) Isset(name string) bool {
 	val, ok := e.store[name]
