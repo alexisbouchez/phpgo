@@ -1443,13 +1443,21 @@ func (i *Interpreter) evalMethodCall(e *ast.MethodCallExpr) runtime.Value {
 			return runtime.NULL
 		}
 	}
+
+	methodName := e.Method.(*ast.Ident).Name
+
+	// Handle Reflection* objects
+	switch obj.(type) {
+	case *ReflectionClass, *ReflectionMethod, *ReflectionProperty, *ReflectionFunction, *ReflectionParameter:
+		args := i.evalArgs(e.Args)
+		return i.callReflectionMethod(obj, methodName, args)
+	}
+
 	objVal, ok := obj.(*runtime.Object)
 	if !ok {
 		// Check for magic __call
 		return runtime.NewError("method call on non-object")
 	}
-
-	methodName := e.Method.(*ast.Ident).Name
 
 	// Look up method in class hierarchy
 	method, foundClass := i.findMethod(objVal.Class, methodName)
@@ -1924,6 +1932,12 @@ func (i *Interpreter) evalNew(e *ast.NewExpr) runtime.Value {
 			msg = args[0].ToString()
 		}
 		return &runtime.Exception{Message: msg}
+	}
+
+	// Special case for Reflection* classes
+	if isReflectionClass(resolvedName) {
+		args := i.evalArgs(e.Args)
+		return i.handleReflectionNew(resolvedName, args)
 	}
 
 	class, ok := i.env.GetClass(resolvedName)

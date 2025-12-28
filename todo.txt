@@ -3,6 +3,5 @@ HIGH PRIORITY
 MEDIUM PRIORITY
 
 LOWER PRIORITY
-- Reflection API
 - Proper type enforcement (strict_types)
 - Attributes

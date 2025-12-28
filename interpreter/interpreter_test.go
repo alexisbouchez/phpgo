@@ -3038,3 +3038,270 @@ func TestObFlush(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// Reflection API
+
+func TestReflectionClassBasic(t *testing.T) {
+	input := `<?php
+	class MyClass {
+		public $name = "test";
+		public function hello() { return "world"; }
+	}
+	$ref = new ReflectionClass("MyClass");
+	echo $ref->getName();
+	`
+	expected := "MyClass"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassFromObject(t *testing.T) {
+	input := `<?php
+	class Foo {}
+	$obj = new Foo();
+	$ref = new ReflectionClass($obj);
+	echo $ref->getName();
+	`
+	expected := "Foo"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassHasMethods(t *testing.T) {
+	input := `<?php
+	class Bar {
+		public function test() {}
+	}
+	$ref = new ReflectionClass("Bar");
+	echo $ref->hasMethod("test") ? "yes" : "no";
+	echo ",";
+	echo $ref->hasMethod("missing") ? "yes" : "no";
+	`
+	expected := "yes,no"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassHasProperty(t *testing.T) {
+	input := `<?php
+	class PropClass {
+		public $exists;
+	}
+	$ref = new ReflectionClass("PropClass");
+	echo $ref->hasProperty("exists") ? "yes" : "no";
+	echo ",";
+	echo $ref->hasProperty("nope") ? "yes" : "no";
+	`
+	expected := "yes,no"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassNewInstance(t *testing.T) {
+	input := `<?php
+	class Greeter {
+		public $msg;
+		public function __construct($m) { $this->msg = $m; }
+		public function greet() { return $this->msg; }
+	}
+	$ref = new ReflectionClass("Greeter");
+	$obj = $ref->newInstance("Hello");
+	echo $obj->greet();
+	`
+	expected := "Hello"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionMethod(t *testing.T) {
+	input := `<?php
+	class Calculator {
+		public static function add($a, $b) { return $a + $b; }
+	}
+	$ref = new ReflectionMethod("Calculator", "add");
+	echo $ref->getName() . ",";
+	echo $ref->isStatic() ? "static" : "instance";
+	echo "," . $ref->getNumberOfParameters();
+	`
+	expected := "add,static,2"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionMethodInvoke(t *testing.T) {
+	input := `<?php
+	class Math {
+		public function multiply($a, $b) { return $a * $b; }
+	}
+	$obj = new Math();
+	$ref = new ReflectionMethod("Math", "multiply");
+	echo $ref->invoke($obj, 3, 4);
+	`
+	expected := "12"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionProperty(t *testing.T) {
+	input := `<?php
+	class Person {
+		public $name = "John";
+		private $age = 30;
+	}
+	$ref = new ReflectionProperty("Person", "name");
+	echo $ref->getName() . ",";
+	echo $ref->isPublic() ? "public" : "not-public";
+	`
+	expected := "name,public"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionPropertyGetValue(t *testing.T) {
+	input := `<?php
+	class Data {
+		public $value = "default";
+	}
+	$obj = new Data();
+	$obj->value = "modified";
+	$ref = new ReflectionProperty("Data", "value");
+	echo $ref->getValue($obj);
+	`
+	expected := "modified"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionPropertySetValue(t *testing.T) {
+	input := `<?php
+	class Item {
+		public $price = 0;
+	}
+	$obj = new Item();
+	$ref = new ReflectionProperty("Item", "price");
+	$ref->setValue($obj, 99);
+	echo $obj->price;
+	`
+	expected := "99"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionFunction(t *testing.T) {
+	input := `<?php
+	function greet($name, $greeting = "Hello") {
+		return "$greeting, $name!";
+	}
+	$ref = new ReflectionFunction("greet");
+	echo $ref->getName() . ",";
+	echo $ref->getNumberOfParameters() . ",";
+	echo $ref->getNumberOfRequiredParameters();
+	`
+	expected := "greet,2,1"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionFunctionInvoke(t *testing.T) {
+	input := `<?php
+	function add($a, $b) { return $a + $b; }
+	$ref = new ReflectionFunction("add");
+	echo $ref->invoke(5, 7);
+	`
+	expected := "12"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionParameters(t *testing.T) {
+	input := `<?php
+	function example($required, $optional = 10) {}
+	$ref = new ReflectionFunction("example");
+	$params = $ref->getParameters();
+	$names = [];
+	foreach ($params as $p) {
+		$names[] = $p->getName() . ":" . ($p->isOptional() ? "opt" : "req");
+	}
+	echo implode(",", $names);
+	`
+	expected := "required:req,optional:opt"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassConstants(t *testing.T) {
+	input := `<?php
+	class Config {
+		const VERSION = "1.0";
+		const DEBUG = true;
+	}
+	$ref = new ReflectionClass("Config");
+	echo $ref->hasConstant("VERSION") ? "yes" : "no";
+	echo ",";
+	echo $ref->getConstant("VERSION");
+	`
+	expected := "yes,1.0"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassParent(t *testing.T) {
+	input := `<?php
+	class Animal {}
+	class Dog extends Animal {}
+	$ref = new ReflectionClass("Dog");
+	$parent = $ref->getParentClass();
+	echo $parent->getName();
+	`
+	expected := "Animal"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestReflectionClassAbstract(t *testing.T) {
+	input := `<?php
+	abstract class Base {}
+	class Concrete {}
+	$abs = new ReflectionClass("Base");
+	$con = new ReflectionClass("Concrete");
+	echo $abs->isAbstract() ? "abs" : "not";
+	echo ",";
+	echo $con->isAbstract() ? "abs" : "not";
+	`
+	expected := "abs,not"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
