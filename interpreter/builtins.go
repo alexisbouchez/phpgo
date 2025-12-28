@@ -539,6 +539,18 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinLog
 	case "exp":
 		return builtinExp
+	case "deg2rad":
+		return builtinDeg2rad
+	case "rad2deg":
+		return builtinRad2deg
+	case "hypot":
+		return builtinHypot
+	case "log10":
+		return builtinLog10
+	case "log1p":
+		return builtinLog1p
+	case "expm1":
+		return builtinExpm1
 
 	// URL functions
 	case "parse_url":
@@ -5486,6 +5498,52 @@ func builtinExp(args ...runtime.Value) runtime.Value {
 		return runtime.NewFloat(0)
 	}
 	return runtime.NewFloat(math.Exp(args[0].ToFloat()))
+}
+
+func builtinDeg2rad(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	degrees := args[0].ToFloat()
+	return runtime.NewFloat(degrees * math.Pi / 180.0)
+}
+
+func builtinRad2deg(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	radians := args[0].ToFloat()
+	return runtime.NewFloat(radians * 180.0 / math.Pi)
+}
+
+func builtinHypot(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewFloat(0)
+	}
+	x := args[0].ToFloat()
+	y := args[1].ToFloat()
+	return runtime.NewFloat(math.Hypot(x, y))
+}
+
+func builtinLog10(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Log10(args[0].ToFloat()))
+}
+
+func builtinLog1p(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Log1p(args[0].ToFloat()))
+}
+
+func builtinExpm1(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewFloat(0)
+	}
+	return runtime.NewFloat(math.Expm1(args[0].ToFloat()))
 }
 
 // ----------------------------------------------------------------------------
