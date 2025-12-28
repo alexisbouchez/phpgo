@@ -566,6 +566,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinChmod
 	case "touch":
 		return builtinTouch
+	case "sys_get_temp_dir":
+		return builtinSysGetTempDir
+	case "tempnam":
+		return builtinTempnam
 
 	// Directory functions
 	case "mkdir":
@@ -5820,6 +5824,33 @@ func builtinTouch(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.TRUE
+}
+
+func builtinSysGetTempDir(args ...runtime.Value) runtime.Value {
+	return runtime.NewString(os.TempDir())
+}
+
+func builtinTempnam(args ...runtime.Value) runtime.Value {
+	dir := os.TempDir()
+	prefix := "php"
+
+	if len(args) >= 1 {
+		dir = args[0].ToString()
+	}
+	if len(args) >= 2 {
+		prefix = args[1].ToString()
+	}
+
+	// Create a temporary file
+	file, err := os.CreateTemp(dir, prefix)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	filename := file.Name()
+	file.Close()
+
+	return runtime.NewString(filename)
 }
 
 // ----------------------------------------------------------------------------
