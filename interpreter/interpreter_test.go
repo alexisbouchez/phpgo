@@ -3646,3 +3646,422 @@ func TestAttributeNewInstance(t *testing.T) {
 		t.Errorf("expected %q, got %q", expected, result)
 	}
 }
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplFixedArray
+
+func TestSplFixedArrayConstruct(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(5);
+	echo $arr->getSize();
+	`
+	expected := "5"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArraySetGet(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(3);
+	$arr[0] = "a";
+	$arr[1] = "b";
+	$arr[2] = "c";
+	echo $arr[0] . $arr[1] . $arr[2];
+	`
+	expected := "abc"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArrayCount(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(10);
+	echo count($arr);
+	`
+	expected := "10"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArraySetSize(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(3);
+	$arr[0] = "a";
+	$arr[1] = "b";
+	$arr[2] = "c";
+	$arr->setSize(5);
+	echo $arr->getSize() . ":" . $arr[0] . $arr[1] . $arr[2];
+	`
+	expected := "5:abc"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArrayIterator(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(3);
+	$arr[0] = "x";
+	$arr[1] = "y";
+	$arr[2] = "z";
+	$result = "";
+	foreach ($arr as $key => $val) {
+		$result .= $key . ":" . $val . ",";
+	}
+	echo $result;
+	`
+	expected := "0:x,1:y,2:z,"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArrayOffsetExists(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(3);
+	$arr[0] = "test";
+	$r1 = isset($arr[0]) ? "yes" : "no";
+	$r2 = isset($arr[1]) ? "yes" : "no";
+	$r3 = isset($arr[5]) ? "yes" : "no";
+	echo $r1 . "," . $r2 . "," . $r3;
+	`
+	expected := "yes,no,no"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArrayToArray(t *testing.T) {
+	input := `<?php
+	$arr = new SplFixedArray(3);
+	$arr[0] = 1;
+	$arr[1] = 2;
+	$arr[2] = 3;
+	$plain = $arr->toArray();
+	echo implode(",", $plain);
+	`
+	expected := "1,2,3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplFixedArrayFromArray(t *testing.T) {
+	input := `<?php
+	$plain = [10, 20, 30];
+	$arr = SplFixedArray::fromArray($plain);
+	echo $arr->getSize() . ":" . $arr[0] . "," . $arr[1] . "," . $arr[2];
+	`
+	expected := "3:10,20,30"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplDoublyLinkedList
+
+func TestSplDoublyLinkedListPushPop(t *testing.T) {
+	input := `<?php
+	$list = new SplDoublyLinkedList();
+	$list->push("a");
+	$list->push("b");
+	$list->push("c");
+	echo $list->pop() . $list->pop() . $list->pop();
+	`
+	expected := "cba"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplDoublyLinkedListShiftUnshift(t *testing.T) {
+	input := `<?php
+	$list = new SplDoublyLinkedList();
+	$list->unshift("a");
+	$list->unshift("b");
+	$list->unshift("c");
+	echo $list->shift() . $list->shift() . $list->shift();
+	`
+	expected := "cba"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplDoublyLinkedListCount(t *testing.T) {
+	input := `<?php
+	$list = new SplDoublyLinkedList();
+	$list->push(1);
+	$list->push(2);
+	$list->push(3);
+	echo count($list);
+	`
+	expected := "3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplDoublyLinkedListTopBottom(t *testing.T) {
+	input := `<?php
+	$list = new SplDoublyLinkedList();
+	$list->push("first");
+	$list->push("middle");
+	$list->push("last");
+	echo $list->bottom() . "," . $list->top();
+	`
+	expected := "first,last"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplDoublyLinkedListIterator(t *testing.T) {
+	input := `<?php
+	$list = new SplDoublyLinkedList();
+	$list->push("x");
+	$list->push("y");
+	$list->push("z");
+	$result = "";
+	foreach ($list as $val) {
+		$result .= $val;
+	}
+	echo $result;
+	`
+	expected := "xyz"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplDoublyLinkedListIsEmpty(t *testing.T) {
+	input := `<?php
+	$list = new SplDoublyLinkedList();
+	$r1 = $list->isEmpty() ? "yes" : "no";
+	$list->push("item");
+	$r2 = $list->isEmpty() ? "yes" : "no";
+	echo $r1 . "," . $r2;
+	`
+	expected := "yes,no"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplStack
+
+func TestSplStackPushPop(t *testing.T) {
+	input := `<?php
+	$stack = new SplStack();
+	$stack->push(1);
+	$stack->push(2);
+	$stack->push(3);
+	echo $stack->pop() . $stack->pop() . $stack->pop();
+	`
+	expected := "321"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplStackIteratorLIFO(t *testing.T) {
+	input := `<?php
+	$stack = new SplStack();
+	$stack->push("a");
+	$stack->push("b");
+	$stack->push("c");
+	$result = "";
+	foreach ($stack as $val) {
+		$result .= $val;
+	}
+	echo $result;
+	`
+	expected := "cba"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplQueue
+
+func TestSplQueueEnqueueDequeue(t *testing.T) {
+	input := `<?php
+	$queue = new SplQueue();
+	$queue->enqueue("first");
+	$queue->enqueue("second");
+	$queue->enqueue("third");
+	echo $queue->dequeue() . "," . $queue->dequeue() . "," . $queue->dequeue();
+	`
+	expected := "first,second,third"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplQueueIteratorFIFO(t *testing.T) {
+	input := `<?php
+	$queue = new SplQueue();
+	$queue->enqueue("a");
+	$queue->enqueue("b");
+	$queue->enqueue("c");
+	$result = "";
+	foreach ($queue as $val) {
+		$result .= $val;
+	}
+	echo $result;
+	`
+	expected := "abc"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplMinHeap
+
+func TestSplMinHeapExtract(t *testing.T) {
+	input := `<?php
+	$heap = new SplMinHeap();
+	$heap->insert(5);
+	$heap->insert(1);
+	$heap->insert(3);
+	$heap->insert(2);
+	$heap->insert(4);
+	$result = "";
+	while (!$heap->isEmpty()) {
+		$result .= $heap->extract() . ",";
+	}
+	echo $result;
+	`
+	expected := "1,2,3,4,5,"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplMinHeapTop(t *testing.T) {
+	input := `<?php
+	$heap = new SplMinHeap();
+	$heap->insert(10);
+	$heap->insert(5);
+	$heap->insert(15);
+	echo $heap->top();
+	`
+	expected := "5"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplMaxHeap
+
+func TestSplMaxHeapExtract(t *testing.T) {
+	input := `<?php
+	$heap = new SplMaxHeap();
+	$heap->insert(5);
+	$heap->insert(1);
+	$heap->insert(3);
+	$heap->insert(2);
+	$heap->insert(4);
+	$result = "";
+	while (!$heap->isEmpty()) {
+		$result .= $heap->extract() . ",";
+	}
+	echo $result;
+	`
+	expected := "5,4,3,2,1,"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplMaxHeapTop(t *testing.T) {
+	input := `<?php
+	$heap = new SplMaxHeap();
+	$heap->insert(10);
+	$heap->insert(5);
+	$heap->insert(15);
+	echo $heap->top();
+	`
+	expected := "15"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+// ----------------------------------------------------------------------------
+// SPL Data Structures - SplPriorityQueue
+
+func TestSplPriorityQueueInsertExtract(t *testing.T) {
+	input := `<?php
+	$pq = new SplPriorityQueue();
+	$pq->insert("low", 1);
+	$pq->insert("high", 10);
+	$pq->insert("medium", 5);
+	echo $pq->extract() . "," . $pq->extract() . "," . $pq->extract();
+	`
+	expected := "high,medium,low"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplPriorityQueueTop(t *testing.T) {
+	input := `<?php
+	$pq = new SplPriorityQueue();
+	$pq->insert("first", 1);
+	$pq->insert("second", 100);
+	$pq->insert("third", 50);
+	echo $pq->top();
+	`
+	expected := "second"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSplPriorityQueueCount(t *testing.T) {
+	input := `<?php
+	$pq = new SplPriorityQueue();
+	$pq->insert("a", 1);
+	$pq->insert("b", 2);
+	$pq->insert("c", 3);
+	echo count($pq);
+	`
+	expected := "3"
+	result := evalOutput(input)
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}

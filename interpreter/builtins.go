@@ -40,8 +40,14 @@ func (i *Interpreter) registerBuiltins() {
 	i.registerIteratorInterfaces()
 	// Register SPL exception classes
 	i.registerSPLExceptions()
+	// Register SPL iterator classes
+	i.registerSPLIterators()
+	// Register SPL data structure classes
+	i.registerSPLDataStructures()
 	// Register predefined constants
 	i.registerPredefinedConstants()
+	// Register database constants
+	i.registerDatabaseConstants()
 }
 
 func (i *Interpreter) registerPredefinedConstants() {
@@ -559,6 +565,512 @@ func (i *Interpreter) registerIteratorInterfaces() {
 		},
 	}
 	i.env.DefineInterface("Stringable", stringable)
+
+	// SeekableIterator interface (extends Iterator)
+	seekableIterator := &runtime.Interface{
+		Name: "SeekableIterator",
+		Methods: map[string]*runtime.Method{
+			"current": {Name: "current", Params: []string{}, IsPublic: true},
+			"key":     {Name: "key", Params: []string{}, IsPublic: true},
+			"next":    {Name: "next", Params: []string{}, IsPublic: true},
+			"rewind":  {Name: "rewind", Params: []string{}, IsPublic: true},
+			"valid":   {Name: "valid", Params: []string{}, IsPublic: true},
+			"seek":    {Name: "seek", Params: []string{"offset"}, IsPublic: true},
+		},
+	}
+	i.env.DefineInterface("SeekableIterator", seekableIterator)
+
+	// OuterIterator interface (extends Iterator)
+	outerIterator := &runtime.Interface{
+		Name: "OuterIterator",
+		Methods: map[string]*runtime.Method{
+			"current":          {Name: "current", Params: []string{}, IsPublic: true},
+			"key":              {Name: "key", Params: []string{}, IsPublic: true},
+			"next":             {Name: "next", Params: []string{}, IsPublic: true},
+			"rewind":           {Name: "rewind", Params: []string{}, IsPublic: true},
+			"valid":            {Name: "valid", Params: []string{}, IsPublic: true},
+			"getInnerIterator": {Name: "getInnerIterator", Params: []string{}, IsPublic: true},
+		},
+	}
+	i.env.DefineInterface("OuterIterator", outerIterator)
+
+	// RecursiveIterator interface (extends Iterator)
+	recursiveIterator := &runtime.Interface{
+		Name: "RecursiveIterator",
+		Methods: map[string]*runtime.Method{
+			"current":     {Name: "current", Params: []string{}, IsPublic: true},
+			"key":         {Name: "key", Params: []string{}, IsPublic: true},
+			"next":        {Name: "next", Params: []string{}, IsPublic: true},
+			"rewind":      {Name: "rewind", Params: []string{}, IsPublic: true},
+			"valid":       {Name: "valid", Params: []string{}, IsPublic: true},
+			"getChildren": {Name: "getChildren", Params: []string{}, IsPublic: true},
+			"hasChildren": {Name: "hasChildren", Params: []string{}, IsPublic: true},
+		},
+	}
+	i.env.DefineInterface("RecursiveIterator", recursiveIterator)
+
+	// IteratorAggregate interface (extends Traversable)
+	iteratorAggregate := &runtime.Interface{
+		Name: "IteratorAggregate",
+		Methods: map[string]*runtime.Method{
+			"getIterator": {Name: "getIterator", Params: []string{}, IsPublic: true},
+		},
+	}
+	i.env.DefineInterface("IteratorAggregate", iteratorAggregate)
+}
+
+func (i *Interpreter) registerSPLIterators() {
+	// Get interfaces for reference
+	iterator, _ := i.env.GetInterface("Iterator")
+	seekableIterator, _ := i.env.GetInterface("SeekableIterator")
+	outerIterator, _ := i.env.GetInterface("OuterIterator")
+	recursiveIterator, _ := i.env.GetInterface("RecursiveIterator")
+	arrayAccess, _ := i.env.GetInterface("ArrayAccess")
+	countable, _ := i.env.GetInterface("Countable")
+	serializable, _ := i.env.GetInterface("Serializable")
+
+	// ArrayIterator - iterates over arrays and objects
+	arrayIterator := &runtime.Class{
+		Name:        "ArrayIterator",
+		Interfaces:  []*runtime.Interface{iterator, seekableIterator, arrayAccess, countable, serializable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	arrayIterator.Constants["STD_PROP_LIST"] = runtime.NewInt(1)
+	arrayIterator.Constants["ARRAY_AS_PROPS"] = runtime.NewInt(2)
+	i.env.DefineClass("ArrayIterator", arrayIterator)
+
+	// RecursiveArrayIterator - recursive array iteration
+	recursiveArrayIterator := &runtime.Class{
+		Name:        "RecursiveArrayIterator",
+		Parent:      arrayIterator,
+		Interfaces:  []*runtime.Interface{recursiveIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	recursiveArrayIterator.Constants["CHILD_ARRAYS_ONLY"] = runtime.NewInt(4)
+	i.env.DefineClass("RecursiveArrayIterator", recursiveArrayIterator)
+
+	// EmptyIterator - always empty iterator
+	emptyIterator := &runtime.Class{
+		Name:        "EmptyIterator",
+		Interfaces:  []*runtime.Interface{iterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("EmptyIterator", emptyIterator)
+
+	// IteratorIterator - wraps any Traversable
+	iteratorIterator := &runtime.Class{
+		Name:        "IteratorIterator",
+		Interfaces:  []*runtime.Interface{outerIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("IteratorIterator", iteratorIterator)
+
+	// InfiniteIterator - infinite iteration over iterator
+	infiniteIterator := &runtime.Class{
+		Name:        "InfiniteIterator",
+		Parent:      iteratorIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("InfiniteIterator", infiniteIterator)
+
+	// NoRewindIterator - prevents rewinding
+	noRewindIterator := &runtime.Class{
+		Name:        "NoRewindIterator",
+		Parent:      iteratorIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("NoRewindIterator", noRewindIterator)
+
+	// LimitIterator - limits iteration
+	limitIterator := &runtime.Class{
+		Name:        "LimitIterator",
+		Parent:      iteratorIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("LimitIterator", limitIterator)
+
+	// CachingIterator - caches current element
+	cachingIterator := &runtime.Class{
+		Name:        "CachingIterator",
+		Parent:      iteratorIterator,
+		Interfaces:  []*runtime.Interface{arrayAccess, countable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	cachingIterator.Constants["CALL_TOSTRING"] = runtime.NewInt(1)
+	cachingIterator.Constants["CATCH_GET_CHILD"] = runtime.NewInt(16)
+	cachingIterator.Constants["TOSTRING_USE_KEY"] = runtime.NewInt(2)
+	cachingIterator.Constants["TOSTRING_USE_CURRENT"] = runtime.NewInt(4)
+	cachingIterator.Constants["TOSTRING_USE_INNER"] = runtime.NewInt(8)
+	cachingIterator.Constants["FULL_CACHE"] = runtime.NewInt(256)
+	i.env.DefineClass("CachingIterator", cachingIterator)
+
+	// RecursiveCachingIterator - recursive caching
+	recursiveCachingIterator := &runtime.Class{
+		Name:        "RecursiveCachingIterator",
+		Parent:      cachingIterator,
+		Interfaces:  []*runtime.Interface{recursiveIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RecursiveCachingIterator", recursiveCachingIterator)
+
+	// FilterIterator - abstract filtering iterator
+	filterIterator := &runtime.Class{
+		Name:        "FilterIterator",
+		Parent:      iteratorIterator,
+		IsAbstract:  true,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	filterIterator.Methods["accept"] = &runtime.Method{
+		Name:       "accept",
+		Params:     []string{},
+		IsPublic:   true,
+		IsAbstract: true,
+	}
+	i.env.DefineClass("FilterIterator", filterIterator)
+
+	// CallbackFilterIterator - filtering with callback
+	callbackFilterIterator := &runtime.Class{
+		Name:        "CallbackFilterIterator",
+		Parent:      filterIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("CallbackFilterIterator", callbackFilterIterator)
+
+	// RecursiveFilterIterator - recursive filtering
+	recursiveFilterIterator := &runtime.Class{
+		Name:        "RecursiveFilterIterator",
+		Parent:      filterIterator,
+		Interfaces:  []*runtime.Interface{recursiveIterator},
+		IsAbstract:  true,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RecursiveFilterIterator", recursiveFilterIterator)
+
+	// RecursiveCallbackFilterIterator - recursive filtering with callback
+	recursiveCallbackFilterIterator := &runtime.Class{
+		Name:        "RecursiveCallbackFilterIterator",
+		Parent:      recursiveFilterIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RecursiveCallbackFilterIterator", recursiveCallbackFilterIterator)
+
+	// ParentIterator - filters for elements with children
+	parentIterator := &runtime.Class{
+		Name:        "ParentIterator",
+		Parent:      recursiveFilterIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("ParentIterator", parentIterator)
+
+	// RegexIterator - filters with regex
+	regexIterator := &runtime.Class{
+		Name:        "RegexIterator",
+		Parent:      filterIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	regexIterator.Constants["USE_KEY"] = runtime.NewInt(1)
+	regexIterator.Constants["INVERT_MATCH"] = runtime.NewInt(2)
+	regexIterator.Constants["MATCH"] = runtime.NewInt(0)
+	regexIterator.Constants["GET_MATCH"] = runtime.NewInt(1)
+	regexIterator.Constants["ALL_MATCHES"] = runtime.NewInt(2)
+	regexIterator.Constants["SPLIT"] = runtime.NewInt(3)
+	regexIterator.Constants["REPLACE"] = runtime.NewInt(4)
+	i.env.DefineClass("RegexIterator", regexIterator)
+
+	// RecursiveRegexIterator - recursive regex filtering
+	recursiveRegexIterator := &runtime.Class{
+		Name:        "RecursiveRegexIterator",
+		Parent:      regexIterator,
+		Interfaces:  []*runtime.Interface{recursiveIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RecursiveRegexIterator", recursiveRegexIterator)
+
+	// AppendIterator - appends multiple iterators
+	appendIterator := &runtime.Class{
+		Name:        "AppendIterator",
+		Parent:      iteratorIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("AppendIterator", appendIterator)
+
+	// MultipleIterator - iterates over multiple iterators simultaneously
+	multipleIterator := &runtime.Class{
+		Name:        "MultipleIterator",
+		Interfaces:  []*runtime.Interface{iterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	multipleIterator.Constants["MIT_NEED_ANY"] = runtime.NewInt(0)
+	multipleIterator.Constants["MIT_NEED_ALL"] = runtime.NewInt(1)
+	multipleIterator.Constants["MIT_KEYS_NUMERIC"] = runtime.NewInt(0)
+	multipleIterator.Constants["MIT_KEYS_ASSOC"] = runtime.NewInt(2)
+	i.env.DefineClass("MultipleIterator", multipleIterator)
+
+	// RecursiveIteratorIterator - iterates recursively
+	recursiveIteratorIterator := &runtime.Class{
+		Name:        "RecursiveIteratorIterator",
+		Interfaces:  []*runtime.Interface{outerIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	recursiveIteratorIterator.Constants["LEAVES_ONLY"] = runtime.NewInt(0)
+	recursiveIteratorIterator.Constants["SELF_FIRST"] = runtime.NewInt(1)
+	recursiveIteratorIterator.Constants["CHILD_FIRST"] = runtime.NewInt(2)
+	recursiveIteratorIterator.Constants["CATCH_GET_CHILD"] = runtime.NewInt(16)
+	i.env.DefineClass("RecursiveIteratorIterator", recursiveIteratorIterator)
+
+	// RecursiveTreeIterator - displays tree structure
+	recursiveTreeIterator := &runtime.Class{
+		Name:        "RecursiveTreeIterator",
+		Parent:      recursiveIteratorIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	recursiveTreeIterator.Constants["BYPASS_CURRENT"] = runtime.NewInt(4)
+	recursiveTreeIterator.Constants["BYPASS_KEY"] = runtime.NewInt(8)
+	recursiveTreeIterator.Constants["PREFIX_LEFT"] = runtime.NewInt(0)
+	recursiveTreeIterator.Constants["PREFIX_MID_HAS_NEXT"] = runtime.NewInt(1)
+	recursiveTreeIterator.Constants["PREFIX_MID_LAST"] = runtime.NewInt(2)
+	recursiveTreeIterator.Constants["PREFIX_END_HAS_NEXT"] = runtime.NewInt(3)
+	recursiveTreeIterator.Constants["PREFIX_END_LAST"] = runtime.NewInt(4)
+	recursiveTreeIterator.Constants["PREFIX_RIGHT"] = runtime.NewInt(5)
+	i.env.DefineClass("RecursiveTreeIterator", recursiveTreeIterator)
+
+	// DirectoryIterator - iterates over directory
+	directoryIterator := &runtime.Class{
+		Name:        "DirectoryIterator",
+		Interfaces:  []*runtime.Interface{seekableIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("DirectoryIterator", directoryIterator)
+
+	// FilesystemIterator - filesystem iteration with flags
+	filesystemIterator := &runtime.Class{
+		Name:        "FilesystemIterator",
+		Parent:      directoryIterator,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	filesystemIterator.Constants["CURRENT_AS_PATHNAME"] = runtime.NewInt(32)
+	filesystemIterator.Constants["CURRENT_AS_FILEINFO"] = runtime.NewInt(0)
+	filesystemIterator.Constants["CURRENT_AS_SELF"] = runtime.NewInt(16)
+	filesystemIterator.Constants["CURRENT_MODE_MASK"] = runtime.NewInt(240)
+	filesystemIterator.Constants["KEY_AS_PATHNAME"] = runtime.NewInt(0)
+	filesystemIterator.Constants["KEY_AS_FILENAME"] = runtime.NewInt(256)
+	filesystemIterator.Constants["FOLLOW_SYMLINKS"] = runtime.NewInt(512)
+	filesystemIterator.Constants["KEY_MODE_MASK"] = runtime.NewInt(3840)
+	filesystemIterator.Constants["NEW_CURRENT_AND_KEY"] = runtime.NewInt(256)
+	filesystemIterator.Constants["SKIP_DOTS"] = runtime.NewInt(4096)
+	filesystemIterator.Constants["UNIX_PATHS"] = runtime.NewInt(8192)
+	i.env.DefineClass("FilesystemIterator", filesystemIterator)
+
+	// RecursiveDirectoryIterator - recursive directory iteration
+	recursiveDirectoryIterator := &runtime.Class{
+		Name:        "RecursiveDirectoryIterator",
+		Parent:      filesystemIterator,
+		Interfaces:  []*runtime.Interface{recursiveIterator},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("RecursiveDirectoryIterator", recursiveDirectoryIterator)
+
+	// GlobIterator - glob pattern iteration
+	globIterator := &runtime.Class{
+		Name:        "GlobIterator",
+		Parent:      filesystemIterator,
+		Interfaces:  []*runtime.Interface{countable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("GlobIterator", globIterator)
+}
+
+func (i *Interpreter) registerSPLDataStructures() {
+	// Get interfaces for reference
+	iterator, _ := i.env.GetInterface("Iterator")
+	arrayAccess, _ := i.env.GetInterface("ArrayAccess")
+	countable, _ := i.env.GetInterface("Countable")
+	serializable, _ := i.env.GetInterface("Serializable")
+
+	// SplDoublyLinkedList - doubly linked list implementation
+	splDoublyLinkedList := &runtime.Class{
+		Name:        "SplDoublyLinkedList",
+		Interfaces:  []*runtime.Interface{iterator, arrayAccess, countable, serializable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	splDoublyLinkedList.Constants["IT_MODE_LIFO"] = runtime.NewInt(2)
+	splDoublyLinkedList.Constants["IT_MODE_FIFO"] = runtime.NewInt(0)
+	splDoublyLinkedList.Constants["IT_MODE_DELETE"] = runtime.NewInt(1)
+	splDoublyLinkedList.Constants["IT_MODE_KEEP"] = runtime.NewInt(0)
+	i.env.DefineClass("SplDoublyLinkedList", splDoublyLinkedList)
+
+	// SplStack - LIFO stack (extends SplDoublyLinkedList)
+	splStack := &runtime.Class{
+		Name:        "SplStack",
+		Parent:      splDoublyLinkedList,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("SplStack", splStack)
+
+	// SplQueue - FIFO queue (extends SplDoublyLinkedList)
+	splQueue := &runtime.Class{
+		Name:        "SplQueue",
+		Parent:      splDoublyLinkedList,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("SplQueue", splQueue)
+
+	// SplHeap - abstract heap class
+	splHeap := &runtime.Class{
+		Name:        "SplHeap",
+		IsAbstract:  true,
+		Interfaces:  []*runtime.Interface{iterator, countable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	splHeap.Methods["compare"] = &runtime.Method{
+		Name:       "compare",
+		Params:     []string{"value1", "value2"},
+		IsPublic:   true,
+		IsAbstract: true,
+	}
+	i.env.DefineClass("SplHeap", splHeap)
+
+	// SplMaxHeap - max heap (largest element first)
+	splMaxHeap := &runtime.Class{
+		Name:        "SplMaxHeap",
+		Parent:      splHeap,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("SplMaxHeap", splMaxHeap)
+
+	// SplMinHeap - min heap (smallest element first)
+	splMinHeap := &runtime.Class{
+		Name:        "SplMinHeap",
+		Parent:      splHeap,
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("SplMinHeap", splMinHeap)
+
+	// SplPriorityQueue - priority queue
+	splPriorityQueue := &runtime.Class{
+		Name:        "SplPriorityQueue",
+		Interfaces:  []*runtime.Interface{iterator, countable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	splPriorityQueue.Constants["EXTR_BOTH"] = runtime.NewInt(3)
+	splPriorityQueue.Constants["EXTR_PRIORITY"] = runtime.NewInt(2)
+	splPriorityQueue.Constants["EXTR_DATA"] = runtime.NewInt(1)
+	i.env.DefineClass("SplPriorityQueue", splPriorityQueue)
+
+	// SplFixedArray - fixed-size array
+	splFixedArray := &runtime.Class{
+		Name:        "SplFixedArray",
+		Interfaces:  []*runtime.Interface{iterator, arrayAccess, countable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("SplFixedArray", splFixedArray)
+
+	// SplObjectStorage - object storage (map with objects as keys)
+	splObjectStorage := &runtime.Class{
+		Name:        "SplObjectStorage",
+		Interfaces:  []*runtime.Interface{iterator, arrayAccess, countable, serializable},
+		Properties:  make(map[string]*runtime.PropertyDef),
+		StaticProps: make(map[string]runtime.Value),
+		Methods:     make(map[string]*runtime.Method),
+		Constants:   make(map[string]runtime.Value),
+	}
+	i.env.DefineClass("SplObjectStorage", splObjectStorage)
 }
 
 func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
@@ -1462,6 +1974,62 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinTimezoneNameFromAbbr
 	case "timezone_version_get":
 		return builtinTimezoneVersionGet
+
+	// MySQLi functions (procedural interface)
+	case "mysqli_connect":
+		return i.builtinMysqliConnect
+	case "mysqli_close":
+		return i.builtinMysqliClose
+	case "mysqli_query":
+		return i.builtinMysqliQuery
+	case "mysqli_prepare":
+		return i.builtinMysqliPrepare
+	case "mysqli_stmt_bind_param":
+		return i.builtinMysqliStmtBindParam
+	case "mysqli_stmt_execute":
+		return i.builtinMysqliStmtExecute
+	case "mysqli_stmt_get_result":
+		return i.builtinMysqliStmtGetResult
+	case "mysqli_stmt_close":
+		return i.builtinMysqliStmtClose
+	case "mysqli_fetch_assoc":
+		return i.builtinMysqliFetchAssoc
+	case "mysqli_fetch_row":
+		return i.builtinMysqliFetchRow
+	case "mysqli_fetch_array":
+		return i.builtinMysqliFetchArray
+	case "mysqli_fetch_all":
+		return i.builtinMysqliFetchAll
+	case "mysqli_fetch_object":
+		return i.builtinMysqliFetchObject
+	case "mysqli_num_rows":
+		return i.builtinMysqliNumRows
+	case "mysqli_affected_rows":
+		return i.builtinMysqliAffectedRows
+	case "mysqli_insert_id":
+		return i.builtinMysqliInsertId
+	case "mysqli_real_escape_string", "mysqli_escape_string":
+		return i.builtinMysqliRealEscapeString
+	case "mysqli_error":
+		return i.builtinMysqliError
+	case "mysqli_errno":
+		return i.builtinMysqliErrno
+	case "mysqli_free_result":
+		return i.builtinMysqliFreeResult
+	case "mysqli_data_seek":
+		return i.builtinMysqliDataSeek
+	case "mysqli_select_db":
+		return i.builtinMysqliSelectDb
+	case "mysqli_ping":
+		return i.builtinMysqliPing
+	case "mysqli_begin_transaction":
+		return i.builtinMysqliBeginTransaction
+	case "mysqli_commit":
+		return i.builtinMysqliCommit
+	case "mysqli_rollback":
+		return i.builtinMysqliRollback
+	case "mysqli_autocommit":
+		return i.builtinMysqliAutocommit
 
 	default:
 		return nil
@@ -2374,6 +2942,23 @@ func builtinCount(args ...runtime.Value) runtime.Value {
 	}
 	if _, ok := args[0].(*runtime.Null); ok {
 		return runtime.NewInt(0)
+	}
+	// Handle SPL data structures with Countable interface
+	switch o := args[0].(type) {
+	case *SplFixedArrayObject:
+		return runtime.NewInt(o.size)
+	case *SplDoublyLinkedListObject:
+		return runtime.NewInt(int64(len(o.elements)))
+	case *SplStackObject:
+		return runtime.NewInt(int64(len(o.elements)))
+	case *SplQueueObject:
+		return runtime.NewInt(int64(len(o.elements)))
+	case *SplHeapObject:
+		return runtime.NewInt(int64(len(o.elements)))
+	case *SplPriorityQueueObject:
+		return runtime.NewInt(int64(len(o.elements)))
+	case *SplObjectStorageObject:
+		return runtime.NewInt(int64(len(o.objects)))
 	}
 	return runtime.NewInt(1)
 }
@@ -3511,8 +4096,8 @@ func builtinIsObject(args ...runtime.Value) runtime.Value {
 	if len(args) < 1 {
 		return runtime.FALSE
 	}
-	_, ok := args[0].(*runtime.Object)
-	return runtime.NewBool(ok)
+	// Check Type() method which returns "object" for all object types
+	return runtime.NewBool(args[0].Type() == "object")
 }
 
 func builtinIsNumeric(args ...runtime.Value) runtime.Value {

@@ -93,6 +93,8 @@ func New() *Interpreter {
 	i.iniSettings["upload_max_filesize"] = "2M"
 	i.iniSettings["post_max_size"] = "8M"
 	i.registerBuiltins()
+	// Populate superglobals with basic info (even for CLI mode)
+	i.populateSuperglobals()
 	return i
 }
 
@@ -240,6 +242,15 @@ func (i *Interpreter) populateSuperglobals() {
 			fileInfo.Set(runtime.NewString("error"), runtime.NewInt(0))
 			fileInfo.Set(runtime.NewString("size"), runtime.NewInt(int64(len(content))))
 			files.Set(runtime.NewString(filename), fileInfo)
+		}
+	}
+
+	// Populate $_ENV with OS environment variables
+	envArr := i.env.Global().GetArray("_ENV")
+	for _, envVar := range os.Environ() {
+		parts := strings.SplitN(envVar, "=", 2)
+		if len(parts) == 2 {
+			envArr.Set(runtime.NewString(parts[0]), runtime.NewString(parts[1]))
 		}
 	}
 }
@@ -544,6 +555,18 @@ func (i *Interpreter) evalForeach(s *ast.ForeachStmt) runtime.Value {
 		if i.implementsInterface(obj.Class, "Iterator") {
 			return i.evalForeachIterator(s, obj)
 		}
+	}
+
+	// Handle SPL data structures
+	switch spl := arr.(type) {
+	case *SplFixedArrayObject:
+		return i.evalForeachSplFixedArray(s, spl)
+	case *SplDoublyLinkedListObject:
+		return i.evalForeachSplDoublyLinkedList(s, spl)
+	case *SplStackObject:
+		return i.evalForeachSplDoublyLinkedList(s, spl.SplDoublyLinkedListObject)
+	case *SplQueueObject:
+		return i.evalForeachSplDoublyLinkedList(s, spl.SplDoublyLinkedListObject)
 	}
 
 	var keys []runtime.Value
@@ -1178,6 +1201,20 @@ func (i *Interpreter) assignTo(target ast.Expr, val runtime.Value) runtime.Value
 				key := i.evalExpr(t.Index)
 				arrVal.Set(key, val)
 			}
+		} else if splFixed, ok := arr.(*SplFixedArrayObject); ok {
+			// Handle SplFixedArray assignment
+			var key runtime.Value = runtime.NULL
+			if t.Index != nil {
+				key = i.evalExpr(t.Index)
+			}
+			i.callSplFixedArrayMethod(splFixed, "offsetSet", []runtime.Value{key, val})
+		} else if splDLL, ok := arr.(*SplDoublyLinkedListObject); ok {
+			// Handle SplDoublyLinkedList assignment
+			var key runtime.Value = runtime.NULL
+			if t.Index != nil {
+				key = i.evalExpr(t.Index)
+			}
+			i.callSplDoublyLinkedListMethod(splDLL, "offsetSet", []runtime.Value{key, val})
 		} else if obj, ok := arr.(*runtime.Object); ok {
 			// Check for ArrayAccess interface
 			if i.implementsInterface(obj.Class, "ArrayAccess") {
@@ -1666,6 +1703,28 @@ func (i *Interpreter) evalMethodCall(e *ast.MethodCallExpr) runtime.Value {
 		return i.callReflectionMethod(obj, methodName, args)
 	}
 
+	// Handle SPL data structure objects
+	switch obj.(type) {
+	case *SplFixedArrayObject, *SplDoublyLinkedListObject, *SplStackObject, *SplQueueObject,
+		*SplHeapObject, *SplPriorityQueueObject, *SplObjectStorageObject:
+		args := i.evalArgs(e.Args)
+		return i.callSplMethod(obj, methodName, args)
+	}
+
+	// Handle DateTime objects
+	switch obj.(type) {
+	case *DateTimeObject, *DateTimeImmutableObject, *DateTimeZoneObject, *DateIntervalObject:
+		args := i.evalArgs(e.Args)
+		return i.callDateTimeMethod(obj, methodName, args)
+	}
+
+	// Handle Database objects
+	switch obj.(type) {
+	case *MySQLiObject, *MySQLiResultObject, *MySQLiStmtObject, *PDOObject, *PDOStatementObject:
+		args := i.evalArgs(e.Args)
+		return i.callDatabaseMethod(obj, methodName, args)
+	}
+
 	objVal, ok := obj.(*runtime.Object)
 	if !ok {
 		// Check for magic __call
@@ -2060,6 +2119,20 @@ func (i *Interpreter) evalStaticCall(e *ast.StaticCallExpr) runtime.Value {
 		className = i.evalExpr(c).ToString()
 	}
 
+	// Handle SPL static method calls
+	if isSplDataStructure(className) {
+		methodName := e.Method.(*ast.Ident).Name
+		args := i.evalArgs(e.Args)
+		return i.handleSplStaticCall(className, methodName, args)
+	}
+
+	// Handle DateTime static method calls
+	if isDateTimeClass(className) {
+		methodName := e.Method.(*ast.Ident).Name
+		args := i.evalArgs(e.Args)
+		return i.handleDateTimeStaticCall(className, methodName, args)
+	}
+
 	class, ok := i.env.GetClass(className)
 	if !ok {
 		return runtime.NewError(fmt.Sprintf("undefined class: %s", className))
@@ -2116,6 +2189,14 @@ func (i *Interpreter) evalPropertyAccess(e *ast.PropertyFetchExpr) runtime.Value
 			return runtime.NULL
 		}
 	}
+
+	// Handle Database object properties
+	propName := e.Property.(*ast.Ident).Name
+	switch obj.(type) {
+	case *MySQLiObject, *MySQLiResultObject, *MySQLiStmtObject:
+		return i.getDatabaseProperty(obj, propName)
+	}
+
 	if objVal, ok := obj.(*runtime.Object); ok {
 		propName := e.Property.(*ast.Ident).Name
 
@@ -2259,6 +2340,21 @@ func (i *Interpreter) evalArrayAccess(e *ast.ArrayAccessExpr) runtime.Value {
 		}
 		return runtime.NewString("")
 	}
+	// Handle SPL data structures with ArrayAccess
+	switch o := arr.(type) {
+	case *SplFixedArrayObject:
+		var key runtime.Value = runtime.NULL
+		if e.Index != nil {
+			key = i.evalExpr(e.Index)
+		}
+		return i.callSplFixedArrayMethod(o, "offsetGet", []runtime.Value{key})
+	case *SplDoublyLinkedListObject:
+		var key runtime.Value = runtime.NULL
+		if e.Index != nil {
+			key = i.evalExpr(e.Index)
+		}
+		return i.callSplDoublyLinkedListMethod(o, "offsetGet", []runtime.Value{key})
+	}
 	// Check for ArrayAccess interface
 	if obj, ok := arr.(*runtime.Object); ok {
 		if i.implementsInterface(obj.Class, "ArrayAccess") {
@@ -2319,6 +2415,24 @@ func (i *Interpreter) evalNew(e *ast.NewExpr) runtime.Value {
 	if isReflectionClass(resolvedName) {
 		args := i.evalArgs(e.Args)
 		return i.handleReflectionNew(resolvedName, args)
+	}
+
+	// Special case for SPL data structure classes
+	if isSplDataStructure(resolvedName) {
+		args := i.evalArgs(e.Args)
+		return i.handleSplNew(resolvedName, args)
+	}
+
+	// Special case for DateTime classes
+	if isDateTimeClass(resolvedName) {
+		args := i.evalArgs(e.Args)
+		return i.handleDateTimeNew(resolvedName, args)
+	}
+
+	// Special case for Database classes
+	if isDatabaseClass(resolvedName) {
+		args := i.evalArgs(e.Args)
+		return i.handleDatabaseNew(resolvedName, args)
 	}
 
 	class, ok := i.env.GetClass(resolvedName)
@@ -2608,6 +2722,19 @@ func (i *Interpreter) evalIsset(e *ast.IssetExpr) runtime.Value {
 				key := i.evalExpr(arrExpr.Index)
 				val := arr.Get(key)
 				if _, ok := val.(*runtime.Null); ok {
+					return runtime.FALSE
+				}
+			} else if splFixed, ok := arrVal.(*SplFixedArrayObject); ok {
+				// Handle SplFixedArray isset
+				if arrExpr.Index == nil {
+					return runtime.FALSE
+				}
+				idx := i.evalExpr(arrExpr.Index).ToInt()
+				if idx < 0 || idx >= splFixed.size {
+					return runtime.FALSE
+				}
+				// Check if value is not NULL
+				if _, isNull := splFixed.elements[idx].(*runtime.Null); isNull {
 					return runtime.FALSE
 				}
 			} else if obj, ok := arrVal.(*runtime.Object); ok {

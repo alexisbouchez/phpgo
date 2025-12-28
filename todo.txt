@@ -5,8 +5,8 @@ Current Status: Foundation Complete (OOP, Attributes, Reflection, Generators)
 Next Milestone: HTTP/Database Layer (for minimal WordPress boot)
 
 Key Milestones:
-  [ ] Milestone 1: HTTP Context & Superglobals - WordPress can receive requests
-  [ ] Milestone 2: Database Layer (MySQL/PDO) - WordPress can read/write data
+  [X] Milestone 1: HTTP Context & Superglobals - WordPress can receive requests
+  [X] Milestone 2: Database Layer (MySQL/PDO) - WordPress can read/write data
   [ ] Milestone 3: Sessions & Cookies - User authentication works
   [ ] Milestone 4: Enhanced File I/O - Plugin/theme installation works
   [ ] Milestone 5: HTTP Client (cURL) - External API calls work
@@ -24,21 +24,21 @@ HIGH PRIORITY - WordPress Core Requirements
 ==============================================
 
 Database Support:
-  [ ] MySQL/MySQLi extension (mysql_connect, mysql_query, etc.)
-  [ ] PDO (PHP Data Objects) with MySQL driver
-  [ ] Prepared statements and parameter binding
-  [ ] Transaction support (BEGIN, COMMIT, ROLLBACK)
-  [ ] mysql_real_escape_string / mysqli_real_escape_string
+  [X] MySQL/MySQLi extension (mysqli_connect, mysqli_query, etc.)
+  [X] PDO (PHP Data Objects) with MySQL driver
+  [X] Prepared statements and parameter binding
+  [X] Transaction support (BEGIN, COMMIT, ROLLBACK)
+  [X] mysqli_real_escape_string
 
 Superglobals (proper population and HTTP context):
-  [ ] $_GET - query string parameters
-  [ ] $_POST - POST request body
-  [ ] $_SERVER - server and request information
-  [ ] $_COOKIE - HTTP cookies
-  [ ] $_SESSION - session data
-  [ ] $_FILES - uploaded files
-  [ ] $_REQUEST - combined GET/POST/COOKIE
-  [ ] $_ENV - environment variables
+  [X] $_GET - query string parameters
+  [X] $_POST - POST request body
+  [X] $_SERVER - server and request information
+  [X] $_COOKIE - HTTP cookies
+  [X] $_SESSION - session data
+  [X] $_FILES - uploaded files
+  [X] $_REQUEST - combined GET/POST/COOKIE
+  [X] $_ENV - environment variables
 
 HTTP Functions:
   [X] http_build_query() - build URL query string
@@ -147,8 +147,10 @@ XML Support (for RSS/Atom feeds, XML-RPC):
   [ ] DOMDocument class
 
 Date/Time Enhancements:
-  [ ] DateTime class and methods
-  [ ] DateTimeZone class
+  [X] DateTime class and methods
+  [X] DateTimeZone class
+  [X] DateInterval class
+  [X] DateTimeImmutable class
   [X] date_create() / date_format()
   [X] strftime() / gmstrftime() - locale-aware formatting
   [X] timezone functions (timezone_identifiers_list, etc.)
@@ -224,8 +226,8 @@ PCRE Enhancements:
   [ ] All PCRE flags and modifiers
 
 SPL (Standard PHP Library):
-  [ ] SPL iterators (DirectoryIterator, RecursiveDirectoryIterator, etc.)
-  [ ] SPL data structures (SplFixedArray, SplQueue, etc.)
+  [X] SPL iterators (DirectoryIterator, RecursiveDirectoryIterator, etc.)
+  [X] SPL data structures (SplFixedArray, SplQueue, SplStack, SplHeap, SplPriorityQueue, SplObjectStorage, etc.)
   [X] spl_object_hash() / spl_object_id()
   [X] SPL exceptions (InvalidArgumentException, etc.)
 
