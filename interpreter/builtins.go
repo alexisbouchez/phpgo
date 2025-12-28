@@ -148,6 +148,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinWordwrap
 	case "nl2br":
 		return builtinNl2br
+	case "str_word_count":
+		return builtinStrWordCount
 	case "ord":
 		return builtinOrd
 	case "chr":
@@ -414,6 +416,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinHtmlspecialchars
 	case "htmlentities":
 		return builtinHtmlentities
+	case "htmlspecialchars_decode":
+		return builtinHtmlspecialcharsDecode
 	case "strip_tags":
 		return builtinStripTags
 	case "addslashes":
@@ -999,6 +1003,59 @@ func builtinNl2br(args ...runtime.Value) runtime.Value {
 	s = strings.ReplaceAll(s, "\n", "<br />\n")
 	s = strings.ReplaceAll(s, "\r", "<br />\r")
 	return runtime.NewString(s)
+}
+
+func builtinStrWordCount(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+
+	str := args[0].ToString()
+	format := int64(0) // Default format: return word count
+
+	if len(args) >= 2 {
+		format = args[1].ToInt()
+	}
+
+	// Split by whitespace and punctuation
+	words := strings.FieldsFunc(str, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '\'' || r == '-')
+	})
+
+	// Filter empty strings
+	var validWords []string
+	for _, word := range words {
+		if len(word) > 0 {
+			validWords = append(validWords, word)
+		}
+	}
+
+	switch format {
+	case 0: // Return word count
+		return runtime.NewInt(int64(len(validWords)))
+	case 1: // Return array of words
+		result := runtime.NewArray()
+		for _, word := range validWords {
+			result.Set(nil, runtime.NewString(word))
+		}
+		return result
+	case 2: // Return associative array (position => word)
+		result := runtime.NewArray()
+		pos := 0
+		currentPos := 0
+		for _, word := range validWords {
+			// Find position in original string
+			idx := strings.Index(str[currentPos:], word)
+			if idx >= 0 {
+				pos = currentPos + idx
+				result.Set(runtime.NewInt(int64(pos)), runtime.NewString(word))
+				currentPos = pos + len(word)
+			}
+		}
+		return result
+	default:
+		return runtime.NewInt(int64(len(validWords)))
+	}
 }
 
 func builtinOrd(args ...runtime.Value) runtime.Value {
@@ -3743,6 +3800,20 @@ func builtinHtmlspecialchars(args ...runtime.Value) runtime.Value {
 
 func builtinHtmlentities(args ...runtime.Value) runtime.Value {
 	return builtinHtmlspecialchars(args...)
+}
+
+func builtinHtmlspecialcharsDecode(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	s := args[0].ToString()
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	s = strings.ReplaceAll(s, "&lt;", "<")
+	s = strings.ReplaceAll(s, "&gt;", ">")
+	s = strings.ReplaceAll(s, "&quot;", "\"")
+	s = strings.ReplaceAll(s, "&#039;", "'")
+	s = strings.ReplaceAll(s, "&#39;", "'")
+	return runtime.NewString(s)
 }
 
 func builtinStripTags(args ...runtime.Value) runtime.Value {
