@@ -372,6 +372,10 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinBase64Encode
 	case "base64_decode":
 		return builtinBase64Decode
+	case "bin2hex":
+		return builtinBin2hex
+	case "hex2bin":
+		return builtinHex2bin
 
 	// Additional string functions
 	case "str_contains":
@@ -3262,6 +3266,26 @@ func builtinBase64Decode(args ...runtime.Value) runtime.Value {
 		return runtime.FALSE
 	}
 	return runtime.NewString(string(decoded))
+}
+
+func builtinBin2hex(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	data := []byte(args[0].ToString())
+	return runtime.NewString(hex.EncodeToString(data))
+}
+
+func builtinHex2bin(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+	hexStr := args[0].ToString()
+	data, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return runtime.FALSE
+	}
+	return runtime.NewString(string(data))
 }
 
 // ----------------------------------------------------------------------------
