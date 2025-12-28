@@ -269,6 +269,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 	case "var_export":
 		return i.builtinVarExport
 
+	// Error handling
+	case "trigger_error":
+		return i.builtinTriggerError
+	case "error_reporting":
+		return i.builtinErrorReporting
+
 	// Output buffering functions
 	case "ob_start":
 		return i.builtinObStart
@@ -2187,6 +2193,59 @@ func (i *Interpreter) formatDebugInfo(className string, arr *runtime.Array) stri
 	}
 	sb.WriteString("}")
 	return sb.String()
+}
+
+// ----------------------------------------------------------------------------
+// Error handling functions
+
+func (i *Interpreter) builtinTriggerError(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	message := args[0].ToString()
+	errorType := int64(1024) // E_USER_NOTICE by default
+
+	if len(args) >= 2 {
+		errorType = args[1].ToInt()
+	}
+
+	// Map error types to names
+	errorName := "Notice"
+	switch errorType {
+	case 256: // E_USER_ERROR
+		errorName = "Fatal error"
+	case 512: // E_USER_WARNING
+		errorName = "Warning"
+	case 1024: // E_USER_NOTICE
+		errorName = "Notice"
+	case 2048: // E_USER_DEPRECATED
+		errorName = "Deprecated"
+	}
+
+	// Output the error message
+	output := fmt.Sprintf("PHP %s: %s\n", errorName, message)
+	i.writeOutput(output)
+
+	return runtime.TRUE
+}
+
+func (i *Interpreter) builtinErrorReporting(args ...runtime.Value) runtime.Value {
+	// Get current error reporting level from ini settings
+	currentLevel := i.iniSettings["error_reporting"]
+	currentInt, _ := strconv.ParseInt(currentLevel, 10, 64)
+
+	// If no argument, return current level
+	if len(args) == 0 {
+		return runtime.NewInt(currentInt)
+	}
+
+	// Set new error reporting level
+	newLevel := args[0].ToInt()
+	i.iniSettings["error_reporting"] = strconv.FormatInt(newLevel, 10)
+
+	// Return old level
+	return runtime.NewInt(currentInt)
 }
 
 // ----------------------------------------------------------------------------
