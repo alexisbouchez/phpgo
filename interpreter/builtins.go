@@ -295,6 +295,8 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return i.builtinIniGet
 	case "ini_set":
 		return i.builtinIniSet
+	case "version_compare":
+		return builtinVersionCompare
 	case "function_exists":
 		return i.builtinFunctionExists
 	case "class_exists":
@@ -2248,6 +2250,97 @@ func (i *Interpreter) builtinIniSet(args ...runtime.Value) runtime.Value {
 		return runtime.NewString(oldValue)
 	}
 	return runtime.FALSE
+}
+
+func builtinVersionCompare(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NULL
+	}
+
+	version1 := args[0].ToString()
+	version2 := args[1].ToString()
+
+	// Parse versions
+	parts1 := parseVersion(version1)
+	parts2 := parseVersion(version2)
+
+	// Compare versions
+	result := compareVersionParts(parts1, parts2)
+
+	// If operator is provided, return bool based on comparison
+	if len(args) >= 3 {
+		operator := args[2].ToString()
+		switch operator {
+		case "<", "lt":
+			return runtime.NewBool(result < 0)
+		case "<=", "le":
+			return runtime.NewBool(result <= 0)
+		case ">", "gt":
+			return runtime.NewBool(result > 0)
+		case ">=", "ge":
+			return runtime.NewBool(result >= 0)
+		case "==", "=", "eq":
+			return runtime.NewBool(result == 0)
+		case "!=", "<>", "ne":
+			return runtime.NewBool(result != 0)
+		}
+	}
+
+	// Return numeric comparison result
+	return runtime.NewInt(int64(result))
+}
+
+func parseVersion(version string) []int {
+	// Remove common version prefixes/suffixes
+	version = strings.ToLower(version)
+	version = strings.ReplaceAll(version, "v", "")
+	version = strings.ReplaceAll(version, "-", ".")
+	version = strings.ReplaceAll(version, "_", ".")
+
+	// Split by dots
+	parts := strings.Split(version, ".")
+	result := make([]int, 0)
+
+	for _, part := range parts {
+		// Try to parse as integer
+		if num, err := strconv.Atoi(part); err == nil {
+			result = append(result, num)
+		} else {
+			// Handle alpha, beta, rc, etc.
+			// For simplicity, treat non-numeric as 0
+			result = append(result, 0)
+		}
+	}
+
+	return result
+}
+
+func compareVersionParts(parts1, parts2 []int) int {
+	maxLen := len(parts1)
+	if len(parts2) > maxLen {
+		maxLen = len(parts2)
+	}
+
+	for i := 0; i < maxLen; i++ {
+		v1 := 0
+		v2 := 0
+
+		if i < len(parts1) {
+			v1 = parts1[i]
+		}
+		if i < len(parts2) {
+			v2 = parts2[i]
+		}
+
+		if v1 < v2 {
+			return -1
+		}
+		if v1 > v2 {
+			return 1
+		}
+	}
+
+	return 0
 }
 
 func (i *Interpreter) builtinFunctionExists(args ...runtime.Value) runtime.Value {
