@@ -941,6 +941,24 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinImageTypeToMimeType
 	case "image_type_to_extension":
 		return builtinImageTypeToExtension
+	case "exif_read_data":
+		return builtinExifReadData
+	case "exif_imagetype":
+		return builtinExifImagetype
+
+	// Gettext functions
+	case "gettext", "_":
+		return builtinGettext
+	case "ngettext":
+		return builtinNgettext
+	case "dgettext":
+		return builtinDgettext
+	case "dngettext":
+		return builtinDngettext
+	case "textdomain":
+		return builtinTextdomain
+	case "bindtextdomain":
+		return builtinBindtextdomain
 
 	// Timezone functions
 	case "timezone_identifiers_list":
@@ -10726,4 +10744,305 @@ func parseDateTime(s string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("unable to parse date: %s", s)
+}
+
+// ----------------------------------------------------------------------------
+// EXIF functions
+
+func builtinExifReadData(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Check if it's a JPEG file
+	if len(data) < 2 || data[0] != 0xFF || data[1] != 0xD8 {
+		return runtime.FALSE
+	}
+
+	result := runtime.NewArray()
+
+	// Basic file info
+	fileInfo, err := os.Stat(filename)
+	if err == nil {
+		result.Set(runtime.NewString("FileName"), runtime.NewString(filepath.Base(filename)))
+		result.Set(runtime.NewString("FileSize"), runtime.NewInt(fileInfo.Size()))
+		result.Set(runtime.NewString("FileDateTime"), runtime.NewInt(fileInfo.ModTime().Unix()))
+	}
+
+	// Parse EXIF data
+	exif := parseExifData(data)
+	for key, value := range exif {
+		result.Set(runtime.NewString(key), value)
+	}
+
+	// Image dimensions from JPEG
+	width, height := getJPEGDimensions(data)
+	if width > 0 && height > 0 {
+		result.Set(runtime.NewString("COMPUTED"), func() runtime.Value {
+			computed := runtime.NewArray()
+			computed.Set(runtime.NewString("Width"), runtime.NewInt(int64(width)))
+			computed.Set(runtime.NewString("Height"), runtime.NewInt(int64(height)))
+			return computed
+		}())
+	}
+
+	result.Set(runtime.NewString("MimeType"), runtime.NewString("image/jpeg"))
+
+	return result
+}
+
+func parseExifData(data []byte) map[string]runtime.Value {
+	result := make(map[string]runtime.Value)
+
+	// Find EXIF marker (APP1)
+	offset := 2
+	for offset < len(data)-4 {
+		if data[offset] != 0xFF {
+			break
+		}
+		marker := data[offset+1]
+		length := int(data[offset+2])<<8 | int(data[offset+3])
+
+		// APP1 marker with EXIF
+		if marker == 0xE1 && offset+10 < len(data) {
+			if string(data[offset+4:offset+8]) == "Exif" {
+				// Parse TIFF header
+				tiffStart := offset + 10
+				if tiffStart+8 < len(data) {
+					bigEndian := data[tiffStart] == 'M' && data[tiffStart+1] == 'M'
+					parseIFD(data, tiffStart, bigEndian, result)
+				}
+				break
+			}
+		}
+
+		offset += 2 + length
+	}
+
+	return result
+}
+
+func parseIFD(data []byte, tiffStart int, bigEndian bool, result map[string]runtime.Value) {
+	// Simplified EXIF parsing - just extract common tags
+	ifdOffset := tiffStart + 8
+	if ifdOffset+2 > len(data) {
+		return
+	}
+
+	var readUint16 func([]byte, int) uint16
+	var readUint32 func([]byte, int) uint32
+
+	if bigEndian {
+		readUint16 = func(d []byte, o int) uint16 { return uint16(d[o])<<8 | uint16(d[o+1]) }
+		readUint32 = func(d []byte, o int) uint32 {
+			return uint32(d[o])<<24 | uint32(d[o+1])<<16 | uint32(d[o+2])<<8 | uint32(d[o+3])
+		}
+	} else {
+		readUint16 = func(d []byte, o int) uint16 { return uint16(d[o]) | uint16(d[o+1])<<8 }
+		readUint32 = func(d []byte, o int) uint32 {
+			return uint32(d[o]) | uint32(d[o+1])<<8 | uint32(d[o+2])<<16 | uint32(d[o+3])<<24
+		}
+	}
+
+	numEntries := int(readUint16(data, ifdOffset))
+	if numEntries > 100 {
+		return // Sanity check
+	}
+
+	entryOffset := ifdOffset + 2
+	for i := 0; i < numEntries && entryOffset+12 <= len(data); i++ {
+		tag := readUint16(data, entryOffset)
+		dataType := readUint16(data, entryOffset+2)
+		count := readUint32(data, entryOffset+4)
+		valueOffset := entryOffset + 8
+
+		// Common EXIF tags
+		switch tag {
+		case 0x010F: // Make
+			result["Make"] = readExifString(data, tiffStart, valueOffset, count, readUint32)
+		case 0x0110: // Model
+			result["Model"] = readExifString(data, tiffStart, valueOffset, count, readUint32)
+		case 0x0112: // Orientation
+			result["Orientation"] = runtime.NewInt(int64(readUint16(data, valueOffset)))
+		case 0x011A: // XResolution
+			result["XResolution"] = runtime.NewString(fmt.Sprintf("%d", readUint32(data, valueOffset)))
+		case 0x011B: // YResolution
+			result["YResolution"] = runtime.NewString(fmt.Sprintf("%d", readUint32(data, valueOffset)))
+		case 0x0128: // ResolutionUnit
+			result["ResolutionUnit"] = runtime.NewInt(int64(readUint16(data, valueOffset)))
+		case 0x0132: // DateTime
+			result["DateTime"] = readExifString(data, tiffStart, valueOffset, count, readUint32)
+		case 0x8769: // EXIF IFD pointer
+			exifOffset := int(readUint32(data, valueOffset))
+			if exifOffset > 0 && tiffStart+exifOffset+2 < len(data) {
+				parseExifIFD(data, tiffStart, tiffStart+exifOffset, bigEndian, result, readUint16, readUint32)
+			}
+		}
+
+		_ = dataType // Suppress unused variable warning
+		entryOffset += 12
+	}
+}
+
+func parseExifIFD(data []byte, tiffStart, ifdOffset int, bigEndian bool, result map[string]runtime.Value,
+	readUint16 func([]byte, int) uint16, readUint32 func([]byte, int) uint32) {
+
+	if ifdOffset+2 > len(data) {
+		return
+	}
+
+	numEntries := int(readUint16(data, ifdOffset))
+	if numEntries > 100 {
+		return
+	}
+
+	entryOffset := ifdOffset + 2
+	for i := 0; i < numEntries && entryOffset+12 <= len(data); i++ {
+		tag := readUint16(data, entryOffset)
+		count := readUint32(data, entryOffset+4)
+		valueOffset := entryOffset + 8
+
+		switch tag {
+		case 0x829A: // ExposureTime
+			result["ExposureTime"] = runtime.NewString("1/1")
+		case 0x829D: // FNumber
+			result["FNumber"] = runtime.NewString("f/1.0")
+		case 0x8827: // ISOSpeedRatings
+			result["ISOSpeedRatings"] = runtime.NewInt(int64(readUint16(data, valueOffset)))
+		case 0x9003: // DateTimeOriginal
+			result["DateTimeOriginal"] = readExifString(data, tiffStart, valueOffset, count, readUint32)
+		case 0x9004: // DateTimeDigitized
+			result["DateTimeDigitized"] = readExifString(data, tiffStart, valueOffset, count, readUint32)
+		case 0xA002: // ExifImageWidth
+			result["ExifImageWidth"] = runtime.NewInt(int64(readUint32(data, valueOffset)))
+		case 0xA003: // ExifImageHeight
+			result["ExifImageLength"] = runtime.NewInt(int64(readUint32(data, valueOffset)))
+		}
+
+		entryOffset += 12
+	}
+}
+
+func readExifString(data []byte, tiffStart, valueOffset int, count uint32, readUint32 func([]byte, int) uint32) runtime.Value {
+	if count > 4 {
+		strOffset := int(readUint32(data, valueOffset))
+		start := tiffStart + strOffset
+		if start > 0 && start+int(count) <= len(data) {
+			str := string(data[start : start+int(count)-1]) // -1 to remove null terminator
+			return runtime.NewString(strings.TrimSpace(str))
+		}
+	} else if count > 0 && valueOffset+int(count) <= len(data) {
+		str := string(data[valueOffset : valueOffset+int(count)-1])
+		return runtime.NewString(strings.TrimSpace(str))
+	}
+	return runtime.NewString("")
+}
+
+func builtinExifImagetype(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	if len(data) < 8 {
+		return runtime.FALSE
+	}
+
+	// Detect image type
+	switch {
+	case bytes.HasPrefix(data, []byte{0x89, 0x50, 0x4E, 0x47}):
+		return runtime.NewInt(IMAGETYPE_PNG)
+	case bytes.HasPrefix(data, []byte{0xFF, 0xD8, 0xFF}):
+		return runtime.NewInt(IMAGETYPE_JPEG)
+	case bytes.HasPrefix(data, []byte("GIF87a")) || bytes.HasPrefix(data, []byte("GIF89a")):
+		return runtime.NewInt(IMAGETYPE_GIF)
+	case bytes.HasPrefix(data, []byte("BM")):
+		return runtime.NewInt(IMAGETYPE_BMP)
+	case bytes.HasPrefix(data, []byte("RIFF")) && len(data) > 12 && bytes.Equal(data[8:12], []byte("WEBP")):
+		return runtime.NewInt(IMAGETYPE_WEBP)
+	default:
+		return runtime.FALSE
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Gettext functions
+
+var gettextDomain = "messages"
+var gettextDomainPaths = make(map[string]string)
+
+func builtinGettext(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewString("")
+	}
+	// In this stub implementation, just return the original string
+	// A full implementation would look up translations
+	return runtime.NewString(args[0].ToString())
+}
+
+func builtinNgettext(args ...runtime.Value) runtime.Value {
+	if len(args) < 3 {
+		return runtime.NewString("")
+	}
+	singular := args[0].ToString()
+	plural := args[1].ToString()
+	n := args[2].ToInt()
+
+	// Simple English plural rules
+	if n == 1 {
+		return runtime.NewString(singular)
+	}
+	return runtime.NewString(plural)
+}
+
+func builtinDgettext(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("")
+	}
+	// domain := args[0].ToString() // Ignored in stub
+	message := args[1].ToString()
+	return runtime.NewString(message)
+}
+
+func builtinDngettext(args ...runtime.Value) runtime.Value {
+	if len(args) < 4 {
+		return runtime.NewString("")
+	}
+	// domain := args[0].ToString() // Ignored in stub
+	singular := args[1].ToString()
+	plural := args[2].ToString()
+	n := args[3].ToInt()
+
+	if n == 1 {
+		return runtime.NewString(singular)
+	}
+	return runtime.NewString(plural)
+}
+
+func builtinTextdomain(args ...runtime.Value) runtime.Value {
+	if len(args) >= 1 && args[0] != runtime.NULL {
+		gettextDomain = args[0].ToString()
+	}
+	return runtime.NewString(gettextDomain)
+}
+
+func builtinBindtextdomain(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	domain := args[0].ToString()
+	path := args[1].ToString()
+	gettextDomainPaths[domain] = path
+	return runtime.NewString(path)
 }

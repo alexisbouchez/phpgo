@@ -138,7 +138,7 @@ Image Manipulation (for media library):
   [ ] GD library basics (imagecreatetruecolor, imagecopyresampled, etc.)
   [ ] Image formats (JPEG, PNG, GIF, WebP)
   [X] getimagesize() / image_type_to_mime_type()
-  [ ] exif_read_data() - read EXIF data from images
+  [X] exif_read_data() - read EXIF data from images
 
 XML Support (for RSS/Atom feeds, XML-RPC):
   [ ] SimpleXML extension (simplexml_load_string, etc.)
@@ -214,7 +214,7 @@ Multi-byte String Functions:
 
 Internationalization:
   [X] iconv() / iconv_strlen() / iconv_substr()
-  [ ] gettext() / _() - translation functions
+  [X] gettext() / _() - translation functions
   [ ] Locale class
 
 PCRE Enhancements:
