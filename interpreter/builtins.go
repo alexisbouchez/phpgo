@@ -514,6 +514,12 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinStrstr
 	case "strrchr":
 		return builtinStrrchr
+	case "mb_strlen":
+		return builtinMbStrlen
+	case "mb_substr":
+		return builtinMbSubstr
+	case "mb_strpos":
+		return builtinMbStrpos
 	case "substr_count":
 		return builtinSubstrCount
 	case "substr_compare":
@@ -4932,6 +4938,98 @@ func builtinStrrchr(args ...runtime.Value) runtime.Value {
 	}
 
 	return runtime.NewString(haystack[idx:])
+}
+
+func builtinMbStrlen(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.NewInt(0)
+	}
+	str := args[0].ToString()
+	// Count runes (Unicode characters) instead of bytes
+	return runtime.NewInt(int64(len([]rune(str))))
+}
+
+func builtinMbSubstr(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.NewString("")
+	}
+	str := args[0].ToString()
+	start := args[1].ToInt()
+
+	runes := []rune(str)
+	length := int64(len(runes))
+
+	// Handle negative start
+	if start < 0 {
+		start = length + start
+		if start < 0 {
+			start = 0
+		}
+	}
+
+	if start >= length {
+		return runtime.NewString("")
+	}
+
+	// Handle length parameter
+	if len(args) >= 3 {
+		subLen := args[2].ToInt()
+		if subLen < 0 {
+			// Negative length: stop at that position from end
+			end := length + subLen
+			if end <= start {
+				return runtime.NewString("")
+			}
+			return runtime.NewString(string(runes[start:end]))
+		}
+		end := start + subLen
+		if end > length {
+			end = length
+		}
+		return runtime.NewString(string(runes[start:end]))
+	}
+
+	return runtime.NewString(string(runes[start:]))
+}
+
+func builtinMbStrpos(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+	haystack := args[0].ToString()
+	needle := args[1].ToString()
+	offset := int64(0)
+
+	if len(args) >= 3 {
+		offset = args[2].ToInt()
+	}
+
+	haystackRunes := []rune(haystack)
+	needleRunes := []rune(needle)
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	if offset >= int64(len(haystackRunes)) {
+		return runtime.FALSE
+	}
+
+	// Search for needle in haystack starting from offset
+	for i := int(offset); i <= len(haystackRunes)-len(needleRunes); i++ {
+		found := true
+		for j := 0; j < len(needleRunes); j++ {
+			if haystackRunes[i+j] != needleRunes[j] {
+				found = false
+				break
+			}
+		}
+		if found {
+			return runtime.NewInt(int64(i))
+		}
+	}
+
+	return runtime.FALSE
 }
 
 func builtinSubstrCount(args ...runtime.Value) runtime.Value {
