@@ -499,6 +499,14 @@ func (i *Interpreter) getBuiltin(name string) runtime.BuiltinFunc {
 		return builtinRewind
 	case "unlink":
 		return builtinUnlink
+	case "copy":
+		return builtinCopy
+	case "rename":
+		return builtinRename
+	case "chmod":
+		return builtinChmod
+	case "touch":
+		return builtinTouch
 
 	// Directory functions
 	case "mkdir":
@@ -4711,6 +4719,89 @@ func builtinUnlink(args ...runtime.Value) runtime.Value {
 	if err != nil {
 		return runtime.FALSE
 	}
+	return runtime.TRUE
+}
+
+func builtinCopy(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	source := args[0].ToString()
+	dest := args[1].ToString()
+
+	// Read source file
+	input, err := os.ReadFile(source)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	// Write to destination
+	err = os.WriteFile(dest, input, 0644)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
+func builtinRename(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	oldpath := args[0].ToString()
+	newpath := args[1].ToString()
+
+	err := os.Rename(oldpath, newpath)
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
+func builtinChmod(args ...runtime.Value) runtime.Value {
+	if len(args) < 2 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+	mode := args[1].ToInt()
+
+	err := os.Chmod(filename, os.FileMode(mode))
+	if err != nil {
+		return runtime.FALSE
+	}
+
+	return runtime.TRUE
+}
+
+func builtinTouch(args ...runtime.Value) runtime.Value {
+	if len(args) < 1 {
+		return runtime.FALSE
+	}
+
+	filename := args[0].ToString()
+
+	// Check if file exists
+	_, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		// Create empty file
+		file, err := os.Create(filename)
+		if err != nil {
+			return runtime.FALSE
+		}
+		file.Close()
+	} else {
+		// Update modification time
+		now := time.Now()
+		err = os.Chtimes(filename, now, now)
+		if err != nil {
+			return runtime.FALSE
+		}
+	}
+
 	return runtime.TRUE
 }
 
